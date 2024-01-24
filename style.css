@@ -1,39 +1,63 @@
+body, html {
+    margin: 0;
+    padding: 0;
+    font-family: 'Arial', sans-serif; /* Specify your preferred font here */
+    background-color: #f4f4f4; /* Light grey background */
+}
+
+.container {
+    width: 80%;
+    margin: auto;
+    overflow: hidden;
+}
+
 .sidebar {
-    width: 100%;
-    background: #333;
+    position: fixed;
+    width: 250px; /* Width of the sidebar */
+    height: 100%;
+    background: #333; /* Dark grey background for the sidebar */
+    padding: 20px;
     color: white;
-    text-align: center;
 }
 
 .sidebar h2 {
-    display: inline-block;
-    margin: 0;
-    padding: 10px;
+    color: #fff;
+    text-align: center;
 }
 
 .sidebar nav ul {
-    display: inline-block;
     list-style-type: none;
     padding: 0;
-    margin: 0;
-}
-
-.sidebar nav ul li {
-    display: inline;
-    margin-right: 20px;
 }
 
 .sidebar nav ul li a {
     color: #fff;
     text-decoration: none;
     padding: 10px;
+    display: block;
 }
 
 .sidebar nav ul li a:hover {
-    background-color: #444;
+    background-color: #444; /* Darker grey for hover effect */
 }
 
 .main-content {
-    margin-top: 50px; /* Adjust based on the height of the top bar */
+    margin-left: 250px; /* Same as sidebar width */
     padding: 20px;
+    background-color: #f4f4f4; /* Light grey background for content area */
+}
+
+.main-content section {
+    margin-bottom: 20px;
+}
+
+@media screen and (max-width: 768px) {
+    .sidebar {
+        width: 100%;
+        height: auto;
+        position: relative;
+    }
+    .main-content {
+        margin-left: 0;
+    }
 }
