@@ -4,6 +4,8 @@
     <!-- Head content -->
     <title>Contact Galen J. Wilkerson</title>
     <link rel="stylesheet" href="style.css">
+    <!-- Add Google reCAPTCHA script -->
+    <script src='https://www.google.com/recaptcha/api.js'></script>
 </head>
 <body>
     <div class="sidebar">
@@ -13,9 +15,21 @@
     <div class="main-content">
         <section id="contact">
             <h3>Contact</h3>
-            <p>For collaborations or inquiries in the field of complex systems and machine learning, please reach out to me.</p>
-            <p>Email: gjwilkerson@gmail.com</p>
-            <p>Phone: +1 619 643 3252</p>
+            <form action="submit_form.php" method="post">
+                <label for="name">Name:</label>
+                <input type="text" id="name" name="name" required><br><br>
+
+                <label for="email">Email:</label>
+                <input type="email" id="email" name="email" required><br><br>
+
+                <label for="message">Message:</label>
+                <textarea id="message" name="message" required></textarea><br><br>
+
+                <!-- Google reCAPTCHA widget -->
+                <div class="g-recaptcha" data-sitekey="your_site_key"></div><br>
+
+                <input type="submit" value="Submit">
+            </form>
         </section>
     </div>
 </body>
