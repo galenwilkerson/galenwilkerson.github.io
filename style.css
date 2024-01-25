@@ -1,22 +1,106 @@
-body, html {
+/* Reset some default styles */
+body, h1, h2, h3, p, ul, li {
     margin: 0;
     padding: 0;
-    font-family: 'Arial', sans-serif;
-    background-color: #f4f4f4; /* Light grey background */
+    list-style: none;
 }
 
-/* Top Navigation Bar */
-.top-nav {
-    background: #333; /* Dark grey background for the top bar */
+body {
+    font-family: Arial, sans-serif;
+    background-color: #f0f0f0; /* Light grey background */
+}
+
+/* Navigation menu styles */
+.fixed-top {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 1000;
+    background: #333; /* Dark grey background for the fixed menu */
     color: #fff;
     text-align: center;
     padding: 10px 0;
-    position: fixed; /* Make the top bar fixed at the top */
-    width: 100%; /* Full width */
-    top: 0; /* Stick to the top */
-    z-index: 100; /* Ensure it's above other content */
+    transition: background-color 0.3s;
 }
 
-.top-nav h2 {
-    margin: 0;
-    padding
+.sidebar {
+    background-color: #333; /* Dark grey background for the sidebar */
+    color: #fff;
+    width: 250px;
+    padding: 20px;
+    height: 100%;
+    position: fixed;
+    overflow-y: scroll;
+}
+
+.sidebar h2 {
+    font-size: 1.5rem;
+    margin-bottom: 20px;
+}
+
+.sidebar ul {
+    padding: 0;
+}
+
+.sidebar ul li {
+    margin-bottom: 15px;
+}
+
+.sidebar ul li a {
+    text-decoration: none;
+    color: #fff;
+    font-weight: bold;
+    font-size: 1rem;
+    transition: color 0.3s;
+}
+
+.sidebar ul li a:hover {
+    color: #ff6600; /* Orange color on hover */
+}
+
+.main-content {
+    margin-left: 250px;
+    padding: 20px;
+}
+
+/* Page section styles */
+h3 {
+    font-size: 1.5rem;
+    margin-bottom: 20px;
+}
+
+/* Contact form styles */
+.contact-form {
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+.contact-form label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: bold;
+}
+
+.contact-form input[type="text"],
+.contact-form input[type="email"],
+.contact-form textarea {
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 10px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+}
+
+.contact-form button {
+    background-color: #ff6600; /* Orange button background */
+    color: #fff;
+    border: none;
+    padding: 10px 20px;
+    cursor: pointer;
+    font-weight: bold;
+}
+
+.contact-form button:hover {
+    background-color: #e65500; /* Darker orange on hover */
+}
