@@ -20,28 +20,25 @@
     </nav>
 </div>
 
+<div class="main-content">
+    <!-- Main content could be a welcome message or introduction -->
+    <section id="welcome">
+        <h3>Welcome</h3>
+        <p>Welcome to my professional portfolio. Please choose a section from the sidebar to learn more about me.</p>
+    </section>
+</div>
 
-
-    <div class="main-content">
-        <!-- Main content could be a welcome message or introduction -->
-        <section id="welcome">
-            <h3>Welcome</h3>
-            <p>Welcome to my professional portfolio. Please choose a section from the sidebar to learn more about me.</p>
-        </section>
-    </div>
-
-    <script>
-    document.addEventListener("DOMContentLoaded", function() {
-        const menuItems = document.querySelectorAll('.header nav ul li a');
-        menuItems.forEach(item => {
-            item.addEventListener('click', function(e) {
-                e.preventDefault(); // Prevent the default behavior of the anchor tag
-                // Add code to handle the click event, such as loading the content for the clicked item
-            });
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    const menuItems = document.querySelectorAll('.header nav ul li a');
+    menuItems.forEach(item => {
+        item.addEventListener('click', function(e) {
+            e.preventDefault(); // Prevent the default behavior of the anchor tag
+            // Add code to handle the click event, such as loading the content for the clicked item
         });
     });
+});
 </script>
 
-    
 </body>
 </html>
