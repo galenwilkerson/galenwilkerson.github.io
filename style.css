@@ -2,33 +2,55 @@ body, html {
     margin: 0;
     padding: 0;
     font-family: 'Arial', sans-serif;
-    background-color: #f4f4f4;
+    background-color: #f4f4f4; /* Light grey background */
 }
 
-.sidebar {
-    background: #333;
-    color: white;
+/* Top Navigation Bar */
+.top-nav {
+    background: #333; /* Dark grey background for the top bar */
+    color: #fff;
     text-align: center;
     padding: 10px 0;
 }
 
-.sidebar h2 {
+.top-nav h2 {
     margin: 0;
     padding: 0;
     display: inline-block;
-    color: #aaa;
+    color: #fff; /* White color for the site title */
 }
 
-.sidebar nav ul {
+.top-nav nav ul {
     list-style-type: none;
     padding: 0;
     margin: 0;
     display: inline-block;
 }
 
-.sidebar nav ul li {
+.top-nav nav ul li {
     display: inline;
     margin-right: 20px;
 }
 
-.sidebar nav ul
+.top-nav nav ul li a {
+    color: #ddd; /* Lighter color for menu items */
+    text-decoration: none;
+    padding: 5px 10px;
+}
+
+.top-nav nav ul li a:hover {
+    background-color: #444; /* Slightly darker grey for hover effect */
+    color: #fff; /* White color on hover */
+}
+
+.main-content {
+    padding: 20px;
+    margin-top: 60px; /* Adjust as needed for top bar height */
+}
+
+@media screen and (max-width: 768px) {
+    .top-nav nav ul li {
+        display: block;
+        margin: 5px 0;
+    }
+}
