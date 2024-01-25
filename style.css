@@ -9,17 +9,18 @@ body {
     font-family: Arial, sans-serif;
     background-color: #f0f0f0; /* Light grey background */
 }
-
 /* Header styles */
 .header {
-    background-color: #333; /* Dark grey background for the header */
-    color: #fff; /* Set text color to white */
+    background-color: #A9A9A9; /* Change to dark grey background */
+    color: #D2B48C; /* Change text color to light tan */
     text-align: center;
     padding: 10px 0;
     display: flex;
     align-items: center;
     justify-content: center;
 }
+
+
 
 .header img {
     margin-right: 20px; /* Add some spacing between the image and name */
@@ -31,9 +32,8 @@ body {
 }
 
 /* Navigation menu styles */
-.header nav ul {
-    display: flex;
-    list-style: none;
+.header nav ul li a {
+    color: #D2B48C; /* Change menu text color to light tan */
 }
 
 .header nav ul li {
