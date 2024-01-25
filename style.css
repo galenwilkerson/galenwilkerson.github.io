@@ -12,21 +12,25 @@ body {
 
 /* Header styles */
 .header {
+    position: fixed; /* Set the header to a fixed position */
+    top: 0; /* Position the header at the top of the page */
+    width: 100%; /* Set the width to 100% of the viewport */
+    z-index: 1000; /* Ensure the header is above other content */
     background-color: #333; /* Dark grey background for the header */
     color: #fff; /* Set text color to white */
     text-align: center;
     padding: 10px 0;
     display: flex;
-    flex-direction: column; /* Change to column to stack elements */
+    justify-content: space-between; /* Adjust as needed */
     align-items: center;
 }
 
 .logo-container {
-    margin-bottom: 20px; /* Add some spacing between the image and name */
+    margin-right: 20px; /* Add some spacing between the image and name */
 }
 
 .header img {
-    margin-bottom: 20px; /* Add some spacing between the image and name */
+    margin-right: 20px; /* Add some spacing between the image and name */
 }
 
 .header h2 {
@@ -37,14 +41,12 @@ body {
 /* Navigation menu styles */
 .header nav {
     display: flex;
-    background-color: #333; /* Dark grey background for the menu */
-    padding: 10px 0; /* Add padding to the menu */
+    align-items: center;
 }
 
 .header nav ul {
     display: flex;
-    flex-direction: row; /* Align menu items horizontally */
-    list-style: none; /* Remove default list style */
+    list-style: none;
 }
 
 .header nav ul li {
