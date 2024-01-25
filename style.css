@@ -11,14 +11,19 @@ body {
 }
 /* Header styles */
 .header {
-    background-color: #A9A9A9; /* Change to dark grey background */
-    color: #D2B48C; /* Change text color to light tan */
+    background-color: #333; /* Dark grey background for the header */
+    color: #fff; /* Set text color to white */
     text-align: center;
     padding: 10px 0;
     display: flex;
     align-items: center;
     justify-content: center;
 }
+
+.logo-container {
+    margin-right: 20px; /* Add some spacing between the image and name */
+}
+
 
 
 
