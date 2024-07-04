@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stick Figure Climber in Portrait Mode</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        canvas {
+            border: 1px solid black;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="graphCanvas" width="400" height="800"></canvas>
+    <script>
+        const canvas = document.getElementById('graphCanvas');
+        const ctx = canvas.getContext('2d');
+
+        let nodes = [];
+        let connections = [];
+        let climbingHolds = [];
+        let draggedNode = null;
+
+        const MAX_STRETCH = 1.1; // Maximum stretch factor
+        let scrollOffset = 0;
+        let holdDensity = 3 * 20 / (800 * 400); // Increased hold density by 1.5x
+        const densityDecreaseRate = 0.999; // Rate parameter to gradually decrease the hold density
+
+        function initializeStickFigure() {
+            const baseY = canvas.height; // Adjusted to place feet exactly at the bottom
+            nodes = [
+                {x: 200, y: baseY - 100, draggable: false},  // Hips
+                {x: 200, y: baseY - 150, draggable: false},  // Shoulders
+                {x: 200, y: baseY - 175, draggable: false},  // Head
+                {x: 162.5, y: baseY - 50, draggable: false},   // Left knee (pointing outward)
+                {x: 175, y: baseY, draggable: true, fixed: true},   // Left foot
+                {x: 237.5, y: baseY - 50, draggable: false},   // Right knee (pointing outward)
+                {x: 225, y: baseY, draggable: true, fixed: true},   // Right foot
+                {x: 175, y: baseY - 175, draggable: false},  // Left elbow
+                {x: 150, y: baseY - 200, draggable: true, fixed: true},   // Left hand (start on hold)
+                {x: 225, y: baseY - 175, draggable: false},  // Right elbow
+                {x: 250, y: baseY - 200, draggable: true, fixed: true}    // Right hand (start on hold)
+            ];
+            connections = [
+                {start: 0, end: 1, length: 50},  // Hips to shoulders
+                {start: 1, end: 2, length: 25},  // Shoulders to head
+                {start: 0, end: 3, length: 50}, // Hips to left knee
+                {start: 3, end: 4, length: 50}, // Left knee to left foot
+                {start: 0, end: 5, length: 50}, // Hips to right knee
+                {start: 5, end: 6, length: 50}, // Right knee to right foot
+                {start: 1, end: 7, length: 40},  // Shoulders to left elbow
+                {start: 7, end: 8, length: 40},  // Left elbow to left hand
+                {start: 1, end: 9, length: 40},  // Shoulders to right elbow
+                {start: 9, end: 10, length: 40}   // Right elbow to right hand
+            ];
+        }
+
+        function initializeClimbingHolds() {
+            const totalHolds = Math.floor(canvas.width * canvas.height * holdDensity);
+            for (let i = 0; i < totalHolds; i++) {
+                climbingHolds.push({
+                    x: Math.random() * canvas.width,
+                    y: Math.random() * canvas.height
+                });
+            }
+        }
+
+        function addNewHolds(scrollDelta) {
+            holdDensity *= densityDecreaseRate; // Gradually decrease hold density
+            const newArea = canvas.width * scrollDelta;
+            const newHoldsCount = Math.floor(newArea * holdDensity);
+            for (let i = 0; i < newHoldsCount; i++) {
+                climbingHolds.push({
+                    x: Math.random() * canvas.width,
+                    y: scrollOffset - Math.random() * scrollDelta // Correct y position for new holds
+                });
+            }
+        }
+
+        function drawNode(x, y, fixed) {
+            ctx.beginPath();
+            ctx.arc(x, y - scrollOffset, 5, 0, 2 * Math.PI); // Scaled down by 0.5
+            ctx.fillStyle = fixed ? 'green' : 'blue';
+            ctx.fill();
+            ctx.stroke();
+        }
+
+        function drawConnections() {
+            ctx.beginPath();
+            for (let connection of connections) {
+                ctx.moveTo(nodes[connection.start].x, nodes[connection.start].y - scrollOffset);
+                ctx.lineTo(nodes[connection.end].x, nodes[connection.end].y - scrollOffset);
+            }
+            ctx.stroke();
+        }
+
+        function drawClimbingHolds() {
+            ctx.fillStyle = 'gray';
+            for (let hold of climbingHolds) {
+                if (hold.y - scrollOffset > -10 && hold.y - scrollOffset < canvas.height + 10) {
+                    ctx.beginPath();
+                    ctx.arc(hold.x, hold.y - scrollOffset, 5, 0, 2 * Math.PI);
+                    ctx.fill();
+                }
+            }
+        }
+
+        function drawGraph() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawClimbingHolds();
+            drawConnections();
+            nodes.forEach(node => drawNode(node.x, node.y, node.fixed));
+        }
+
+        function limitStretch(node1, node2, maxLength) {
+            const dx = node2.x - node1.x;
+            const dy = node2.y - node1.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            if (distance > maxLength) {
+                const scale = maxLength / distance;
+                if (!node1.fixed) {
+                    node1.x += dx * (1 - scale) * 0.5;
+                    node1.y += dy * (1 - scale) * 0.5;
+                }
+                if (!node2.fixed) {
+                    node2.x -= dx * (1 - scale) * 0.5;
+                    node2.y -= dy * (1 - scale) * 0.5;
+                }
+            }
+        }
+
+        function applyForceDirectedLayout() {
+            const k = 0.1; // Spring constant
+            const damping = 0.8; // Damping factor
+            const headNodeIndex = 2;
+            const upwardForce = -0.5; // Small upward force
+
+            // Indices of knees and elbows
+            const leftKneeIndex = 3;
+            const rightKneeIndex = 5;
+            const leftElbowIndex = 7;
+            const rightElbowIndex = 9;
+
+            // Outward forces
+            const outwardForceKnees = 0.5;
+            const outwardForceElbows = 0.3;
+
+            for (let i = 0; i < nodes.length; i++) {
+                if (!nodes[i].draggable && !nodes[i].fixed) {
+                    let fx = 0, fy = 0;
+                    for (let connection of connections) {
+                        if (connection.start === i || connection.end === i) {
+                            const other = connection.start === i ? connection.end : connection.start;
+                            const dx = nodes[i].x - nodes[other].x;
+                            const dy = nodes[i].y - nodes[other].y;
+                            const distance = Math.sqrt(dx * dx + dy * dy);
+                            const force = k * (distance - connection.length);
+                            fx -= force * dx / distance;
+                            fy -= force * dy / distance;
+                        }
+                    }
+                    if (i === headNodeIndex) {
+                        fy += upwardForce; // Apply upward force to the head node
+                    }
+                    if (i === leftKneeIndex || i === leftElbowIndex) {
+                        fx -= (i === leftKneeIndex ? outwardForceKnees : outwardForceElbows); // Apply outward force to the left knee and elbow
+                    }
+                    if (i === rightKneeIndex || i === rightElbowIndex) {
+                        fx += (i === rightKneeIndex ? outwardForceKnees : outwardForceElbows); // Apply outward force to the right knee and elbow
+                    }
+                    nodes[i].x += fx * damping;
+                    nodes[i].y += fy * damping;
+                }
+            }
+
+            // Apply stretch limits
+            for (let connection of connections) {
+                limitStretch(nodes[connection.start], nodes[connection.end], connection.length * MAX_STRETCH);
+            }
+        }
+
+        function snapToHold(node) {
+            const snapDistance = 10;
+            for (let hold of climbingHolds) {
+                const dx = hold.x - node.x;
+                const dy = hold.y - node.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                if (distance < snapDistance) {
+                    node.x = hold.x;
+                    node.y = hold.y;
+                    node.fixed = true;
+                    return;
+                }
+            }
+            node.fixed = false;
+        }
+
+        function updateScrollOffset() {
+            const hipsNode = nodes[0];
+            const targetY = canvas.height / 2;
+            if (hipsNode.y - scrollOffset < targetY) {
+                const newScrollOffset = hipsNode.y - targetY;
+                const scrollDelta = newScrollOffset - scrollOffset;
+                scrollOffset = newScrollOffset;
+                if (scrollDelta > 0) {
+                    addNewHolds(scrollDelta);
+                }
+            }
+        }
+
+        function checkFall() {
+            const leftHand = nodes[8];
+            const rightHand = nodes[10];
+            if (!leftHand.fixed && !rightHand.fixed) {
+                for (let node of nodes) {
+                    if (!node.fixed) {
+                        node.y += 5; // Simulate falling
+                    }
+                }
+            }
+        }
+
+        canvas.addEventListener('mousedown', (e) => {
+            if (e.button !== 0) return; // Only handle left-click
+
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top + scrollOffset;
+
+            for (let node of nodes) {
+                if (node.draggable && Math.sqrt((x - node.x)**2 + (y - node.y)**2) <= 10) {
+                    draggedNode = node;
+                    draggedNode.fixed = false;
+                    return;
+                }
+            }
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            if (draggedNode) {
+                const rect = canvas.getBoundingClientRect();
+                draggedNode.x = e.clientX - rect.left;
+                draggedNode.y = e.clientY - rect.top + scrollOffset;
+                applyForceDirectedLayout();
+                updateScrollOffset();
+                drawGraph();
+            }
+        });
+
+        canvas.addEventListener('mouseup', () => {
+            if (draggedNode) {
+                snapToHold(draggedNode);
+                draggedNode = null;
+            }
+        });
+
+        function animate() {
+            applyForceDirectedLayout();
+            updateScrollOffset();
+            checkFall();
+            drawGraph();
+            requestAnimationFrame(animate);
+        }
+
+        initializeStickFigure();
+        initializeClimbingHolds();
+        animate();
+    </script>
+</body>
+</html>
+
