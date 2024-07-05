@@ -35,7 +35,7 @@
               width = +svg.attr("width"),
               height = +svg.attr("height");
 
-        const n = 200;  // Number of nodes
+        const n = 150;  // Number of nodes
         let nodes = Array.from({length: n}, (_, i) => ({id: i, value: 10})); // Assign initial value of 10 to each node
         let links = [];
         let currentPlayer = Math.random() < 0.5 ? "red" : "blue"; // Randomly determine who goes first
@@ -85,6 +85,7 @@
         let link = svg.append("g")
             .attr("stroke", "#999")
             .attr("stroke-opacity", 0.6)
+            .attr("stroke-width", 5)
             .selectAll("line");
 
         const node = svg.append("g")
@@ -94,6 +95,7 @@
             .data(nodes)
             .join("circle")
             .attr("r", 5)
+            .attr("r", d => (d.id === 0 || d.id === 1) ? 15 : 5)  // sets the radius of red and blue nodes to 15, others to 5
             .attr("fill", (d, i) => i === 0 ? "red" : i === 1 ? "blue" : "black")
             .on("click", function(event, d) {
                 if (turnCount > maxTurns) return; // Game has ended
@@ -162,7 +164,7 @@
             const enterLinks = link.enter().append("line")
                 .attr("stroke", "#999")
                 .attr("stroke-width", 1)
-                .attr("stroke-opacity", 0.6)
+                .attr("stroke-opacity", 0.9)
                 .attr("marker-end", "url(#end)");
             link = enterLinks.merge(link);
             simulation.nodes(nodes);
