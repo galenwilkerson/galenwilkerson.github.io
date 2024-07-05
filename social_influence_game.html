@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Social Influence Game by Galen</title>
+    <script src="https://d3js.org/d3.v6.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            margin: 0;
+            height: 100vh;
+            padding: 20px;
+        }
+        #title, #status, #turnCounter {
+            font-size: 20px;
+            text-align: center;
+            margin: 10px;
+        }
+        svg {
+            border: 1px solid black;
+        }
+    </style>
+</head>
+<body>
+    <div id="title">Social Influence Game by Galen -- Add or Remove connections to maximize your income in 20 turns.</div>
+    <svg width="800" height="600"></svg>
+    <div id="status"></div>
+    <div id="turnCounter"></div>
+    <script>
+        const svg = d3.select("svg"),
+              width = +svg.attr("width"),
+              height = +svg.attr("height");
+
+        const n = 200;  // Number of nodes
+        let nodes = Array.from({length: n}, (_, i) => ({id: i, value: 10})); // Assign initial value of 10 to each node
+        let links = [];
+        let currentPlayer = Math.random() < 0.5 ? "red" : "blue"; // Randomly determine who goes first
+        let budgets = {red: 5, blue: 5};
+        let turnCount = 1;
+        const maxTurns = 20;
+
+        function generateErdosRenyiGraph(n, meanDegree) {
+            const p = meanDegree / (n - 1);
+            let newLinks = [];
+            for (let i = 2; i < n; i++) { // Start from 2 to exclude red and blue nodes
+                for (let j = i + 1; j < n; j++) {
+                    if (Math.random() < p) {
+                        newLinks.push({source: i, target: j});
+                    }
+                }
+            }
+            return newLinks;
+        }
+
+        links = generateErdosRenyiGraph(n, 2);
+
+        function updateStatus() {
+            document.getElementById("status").innerText = `Turn: ${currentPlayer.charAt(0).toUpperCase() + currentPlayer.slice(1)}, Red Budget: ${budgets.red}, Blue Budget: ${budgets.blue}`;
+            document.getElementById("turnCounter").innerText = `Turn: ${turnCount} / ${maxTurns}`;
+        }
+
+        svg.append("defs").selectAll("marker")
+            .data(["end"])
+            .join("marker")
+            .attr("id", d => d)
+            .attr("viewBox", "0 -5 10 10")
+            .attr("refX", 15)
+            .attr("refY", 0)
+            .attr("markerWidth", 6)
+            .attr("markerHeight", 6)
+            .attr("orient", "auto")
+            .append("path")
+            .attr("d", "M0,-5L10,0L0,5")
+            .attr("fill", "black");
+
+        const simulation = d3.forceSimulation(nodes)
+            .force("link", d3.forceLink(links).id(d => d.id).distance(50))
+            .force("charge", d3.forceManyBody().strength(-50))
+            .force("center", d3.forceCenter(width / 2, height / 2));
+
+        let link = svg.append("g")
+            .attr("stroke", "#999")
+            .attr("stroke-opacity", 0.6)
+            .selectAll("line");
+
+        const node = svg.append("g")
+            .attr("stroke", "#fff")
+            .attr("stroke-width", 1.5)
+            .selectAll("circle")
+            .data(nodes)
+            .join("circle")
+            .attr("r", 5)
+            .attr("fill", (d, i) => i === 0 ? "red" : i === 1 ? "blue" : "black")
+            .on("click", function(event, d) {
+                if (turnCount > maxTurns) return; // Game has ended
+                if (d.id === 0 || d.id === 1) return; // Prevent modifying control nodes
+                let targetIndex = currentPlayer === "red" ? 0 : 1;
+                let existingLink = links.find(l => (l.source.id === d.id && l.target.id === targetIndex) || (l.target.id === d.id && l.source.id === targetIndex));
+                if (existingLink) {
+                    links = links.filter(l => l !== existingLink);
+                    budgets[currentPlayer]--;
+                } else if (budgets[currentPlayer] > 0) {
+                    links.push({source: d.id, target: targetIndex});
+                    budgets[currentPlayer]--;
+                } else {
+                    return; // No action taken if budget is 0
+                }
+                update();
+                endTurn();
+            });
+
+        function redistributeWealth() {
+            let redIncome = 0, blueIncome = 0;
+            nodes.forEach(node => {
+                const outNeighbors = links.filter(l => l.source.id === node.id).map(l => l.target);
+                const outflow = node.value * 0.5;
+                const share = outNeighbors.length > 0 ? outflow / outNeighbors.length : 0;
+
+                // Reduce current node's value
+                node.value -= outflow;
+
+                // Distribute to neighbors
+                outNeighbors.forEach(neighbor => {
+                    nodes[neighbor.id].value += share;
+                    if (neighbor.id === 0) redIncome += share;
+                    if (neighbor.id === 1) blueIncome += share;
+                });
+
+                // Global fixed income
+                node.value += 1;  // Increase each node's value by 1
+            });
+
+            // Allocate income to Red and Blue budgets
+            budgets.red += Math.round(redIncome);
+            budgets.blue += Math.round(blueIncome);
+        }
+
+        function endTurn() {
+            redistributeWealth();
+            currentPlayer = currentPlayer === "red" ? "blue" : "red";
+            turnCount++;
+            updateStatus();
+            
+            if (turnCount > maxTurns) {
+                endGame();
+            }
+        }
+
+        function endGame() {
+            let winner = budgets.red > budgets.blue ? "Red" : budgets.blue > budgets.red ? "Blue" : "Tie";
+            alert(`Game Over! ${winner === "Tie" ? "It's a tie!" : winner + " wins!"}\nFinal Scores:\nRed: ${budgets.red}\nBlue: ${budgets.blue}`);
+            node.on("click", null); // Disable further clicks
+        }
+
+        function update() {
+            link = link.data(links, d => `${d.source.id}-${d.target.id}`);
+            link.exit().remove();
+            const enterLinks = link.enter().append("line")
+                .attr("stroke", "#999")
+                .attr("stroke-width", 1)
+                .attr("stroke-opacity", 0.6)
+                .attr("marker-end", "url(#end)");
+            link = enterLinks.merge(link);
+            simulation.nodes(nodes);
+            simulation.force("link").links(links);
+            simulation.alpha(1).restart();
+        }
+
+        simulation.on("tick", () => {
+            link.attr("x1", d => Math.max(5, Math.min(width - 5, d.source.x)))
+                .attr("y1", d => Math.max(5, Math.min(height - 5, d.source.y)))
+                .attr("x2", d => Math.max(5, Math.min(width - 5, d.target.x)))
+                .attr("y2", d => Math.max(5, Math.min(height - 5, d.target.y)));
+
+            node.attr("cx", d => d.x = Math.max(5, Math.min(width - 5, d.x)))
+                .attr("cy", d => d.y = Math.max(5, Math.min(height - 5, d.y)));
+        });
+
+        update();
+        updateStatus();
+    </script>
+</body>
+</html>
