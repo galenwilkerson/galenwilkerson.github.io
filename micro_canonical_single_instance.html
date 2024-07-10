@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Single Instance Simulation</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            margin: 0;
+            background-color: #f0f0f0;
+        }
+        canvas {
+            border: 1px solid black;
+        }
+        #controls {
+            margin-bottom: 20px;
+        }
+        #description {
+            margin-top: 20px;
+            max-width: 600px;
+            text-align: center;
+            background-color: #fff;
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div id="controls">
+        <label for="numParticles">Number of Particles: </label>
+        <input type="range" id="numParticles" min="10" max="200" value="100" oninput="updateSliderValue('numParticles', 'numParticlesValue')">
+        <span id="numParticlesValue">100</span>
+        <br>
+        <label for="totalEnergy">Total Energy: </label>
+        <input type="range" id="totalEnergy" min="100" max="10000" value="1000" oninput="updateSliderValue('totalEnergy', 'totalEnergyValue')">
+        <span id="totalEnergyValue">1000</span>
+        <br>
+        <label for="timeLimit">Time Limit (seconds): </label>
+        <input type="range" id="timeLimit" min="1" max="10" value="5" oninput="updateSliderValue('timeLimit', 'timeLimitValue')">
+        <span id="timeLimitValue">5</span>
+        <br>
+        <button onclick="startSingleInstanceSimulation()">Start Simulation</button>
+        <button onclick="stopSingleInstanceSimulation()">Stop Simulation</button>
+    </div>
+    <canvas id="singleInstanceCanvas" width="500" height="500"></canvas>
+    <div id="description">
+        <h2>Microcanonical Ensemble Model</h2>
+        <p>
+            The microcanonical ensemble represents an isolated system with a fixed number of particles, volume, and total energy.
+            In this model, the energy is conserved and distributed among the particles in the system. This ensemble is particularly useful for studying isolated systems and fundamental thermodynamic properties.
+        </p>
+    </div>
+
+    <script>
+        let animationFrameId;
+        let startTime;
+
+        function updateSliderValue(sliderId, displayId) {
+            document.getElementById(displayId).innerText = document.getElementById(sliderId).value;
+        }
+
+        const singleInstanceCanvas = document.getElementById('singleInstanceCanvas');
+        const singleInstanceCtx = singleInstanceCanvas.getContext('2d');
+        let singleInstanceParticles = [];
+        let singleInstanceNumParticles = 100;
+        let singleInstanceTotalEnergy = 1000;
+        const boxSize = 500;
+
+        function startSingleInstanceSimulation() {
+            singleInstanceNumParticles = parseInt(document.getElementById('numParticles').value);
+            singleInstanceTotalEnergy = parseInt(document.getElementById('totalEnergy').value);
+            const timeLimit = parseInt(document.getElementById('timeLimit').value) * 1000;
+            initSingleInstanceParticles();
+            startTime = performance.now();
+            animationFrameId = requestAnimationFrame(() => updateSingleInstance(timeLimit));
+        }
+
+        function stopSingleInstanceSimulation() {
+            cancelAnimationFrame(animationFrameId);
+        }
+
+        function initSingleInstanceParticles() {
+            singleInstanceParticles = [];
+            let remainingEnergy = singleInstanceTotalEnergy;
+            for (let i = 0; i < singleInstanceNumParticles; i++) {
+                const particle = {
+                    x: Math.random() * boxSize,
+                    y: Math.random() * boxSize,
+                    vx: 0,
+                    vy: 0,
+                    radius: 2
+                };
+                const energy = (i === singleInstanceNumParticles - 1) ? remainingEnergy : Math.random() * remainingEnergy;
+                const speed = Math.sqrt(2 * energy);
+                const angle = Math.random() * 2 * Math.PI;
+                particle.vx = speed * Math.cos(angle);
+                particle.vy = speed * Math.sin(angle);
+                remainingEnergy -= energy;
+                singleInstanceParticles.push(particle);
+            }
+        }
+
+        function updateSingleInstance(timeLimit) {
+            if (performance.now() - startTime >= timeLimit) {
+                stopSingleInstanceSimulation();
+                return;
+            }
+            singleInstanceCtx.clearRect(0, 0, singleInstanceCanvas.width, singleInstanceCanvas.height);
+            for (const particle of singleInstanceParticles) {
+                particle.x += particle.vx;
+                particle.y += particle.vy;
+
+                if (particle.x - particle.radius <= 0 || particle.x + particle.radius >= boxSize) particle.vx *= -1;
+                if (particle.y - particle.radius <= 0 || particle.y + particle.radius >= boxSize) particle.vy *= -1;
+
+                for (const other of singleInstanceParticles) {
+                    if (other !== particle && checkCollision(particle, other)) {
+                        resolveCollision(particle, other);
+                    }
+                }
+
+                singleInstanceCtx.beginPath();
+                singleInstanceCtx.arc(particle.x, particle.y, particle.radius, 0, Math.PI * 2);
+                singleInstanceCtx.fill();
+            }
+            animationFrameId = requestAnimationFrame(() => updateSingleInstance(timeLimit));
+        }
+
+        function checkCollision(p1, p2) {
+            const dx = p1.x - p2.x;
+            const dy = p1.y - p2.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            return distance < p1.radius + p2.radius;
+        }
+
+        function resolveCollision(p1, p2) {
+            const dx = p1.x - p2.x;
+            const dy = p1.y - p2.y;
+            const collisionAngle = Math.atan2(dy, dx);
+
+            const speed1 = Math.sqrt(p1.vx * p1.vx + p1.vy * p1.vy);
+            const speed2 = Math.sqrt(p2.vx * p2.vx + p2.vy * p2.vy);
+
+            const direction1 = Math.atan2(p1.vy, p1.vx);
+            const direction2 = Math.atan2(p2.vy, p2.vx);
+
+            const velocityX1 = speed1 * Math.cos(direction1 - collisionAngle);
+            const velocityY1 = speed1 * Math.sin(direction1 - collisionAngle);
+            const velocityX2 = speed2 * Math.cos(direction2 - collisionAngle);
+            const velocityY2 = speed2 * Math.sin(direction2 - collisionAngle);
+
+            const finalVelocityX1 = ((p1.radius - p2.radius) * velocityX1 + (2 * p2.radius) * velocityX2) / (p1.radius + p2.radius);
+            const finalVelocityX2 = ((2 * p1.radius) * velocityX1 + (p2.radius - p1.radius) * velocityX2) / (p1.radius + p2.radius);
+
+            p1.vx = Math.cos(collisionAngle) * finalVelocityX1 + Math.cos(collisionAngle + Math.PI / 2) * velocityY1;
+            p1.vy = Math.sin(collisionAngle) * finalVelocityX1 + Math.sin(collisionAngle + Math.PI / 2) * velocityY1;
+            p2.vx = Math.cos(collisionAngle) * finalVelocityX2 + Math.cos(collisionAngle + Math.PI / 2) * velocityY2;
+            p2.vy = Math.sin(collisionAngle) * finalVelocityX2 + Math.sin(collisionAngle + Math.PI / 2) * velocityY2;
+        }
+    </script>
+</body>
+</html>
+
