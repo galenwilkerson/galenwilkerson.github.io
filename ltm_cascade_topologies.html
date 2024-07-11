@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Linear Threshold Model</title>
+    <script src="https://d3js.org/d3.v6.min.js"></script>
+    <style>
+        .node {
+            stroke: #000;
+            stroke-width: 1.5px;
+        }
+        .link {
+            stroke: #999;
+            stroke-opacity: 0.6;
+        }
+        .parameter {
+            margin-top: 10px;
+        }
+        .sidebar {
+            position: absolute;
+            right: 0;
+            width: 300px;
+            top: 0;
+            background-color: #f8f8f8;
+            padding: 20px;
+            border-left: 1px solid #ccc;
+        }
+        .chart {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div>
+        <label for="network-topology">Network Topology: </label>
+        <select id="network-topology">
+            <option value="random">Random</option>
+            <option value="small-world">Small-world</option>
+            <option value="preferential-attachment">Preferential Attachment</option>
+        </select>
+    </div>
+    <div class="parameter" id="common-parameters">
+        <div>
+            <label for="num-nodes">Number of Nodes: </label>
+            <input type="range" id="num-nodes" name="num-nodes" min="10" max="100" step="1" value="100">
+            <span id="num-nodes-value">100</span>
+        </div>
+        <div>
+            <label for="min-threshold">Minimum Threshold: </label>
+            <input type="range" id="min-threshold" name="min-threshold" min="0" max="1" step="0.01" value="0.1">
+            <span id="min-threshold-value">0.1</span>
+        </div>
+        <div>
+            <label for="max-threshold">Maximum Threshold: </label>
+            <input type="range" id="max-threshold" name="max-threshold" min="0" max="1" step="0.01" value="0.1">
+            <span id="max-threshold-value">0.1</span>
+        </div>
+        <div>
+            <label for="run-speed">Run Speed (ms): </label>
+            <input type="range" id="run-speed" name="run-speed" min="10" max="1000" step="10" value="10">
+            <span id="run-speed-value">10</span>
+        </div>
+    </div>
+    <div class="parameter" id="random-parameters">
+        <label for="mean-degree">Mean Degree: </label>
+        <input type="range" id="mean-degree" name="mean-degree" min="1" max="10" step="1" value="2">
+        <span id="mean-degree-value">2</span>
+    </div>
+    <div class="parameter" id="small-world-parameters" style="display: none;">
+        <label for="rewiring-probability">Rewiring Probability: </label>
+        <input type="range" id="rewiring-probability" name="rewiring-probability" min="0" max="1" step="0.01" value="0.1">
+        <span id="rewiring-probability-value">0.1</span>
+    </div>
+    <div class="parameter" id="preferential-attachment-parameters" style="display: none;">
+        <label for="attachment-degree">Attachment Degree: </label>
+        <input type="range" id="attachment-degree" name="attachment-degree" min="1" max="10" step="1" value="2">
+        <span id="attachment-degree-value">2</span>
+    </div>
+    <button id="generate-run-cascade">Generate and Run Cascade</button>
+    <svg width="660" height="600"></svg>
+
+    <div class="sidebar">
+        <h3>Degree Distribution</h3>
+        <div id="degree-distribution" class="chart"></div>
+    </div>
+
+    <script>
+        const width = 660, height = 600;
+        let nodes = [], links = [], thresholds = [], activeNodes = new Set(), seedNode = null;
+        let runSpeed = parseInt(document.getElementById('run-speed').value);
+
+        const svg = d3.select("svg")
+            .attr("width", width)
+            .attr("height", height);
+
+        const linkGroup = svg.append("g").attr("class", "links");
+        const nodeGroup = svg.append("g").attr("class", "nodes");
+
+        function updateSliderValues() {
+            document.getElementById('num-nodes-value').innerText = document.getElementById('num-nodes').value;
+            document.getElementById('min-threshold-value').innerText = document.getElementById('min-threshold').value;
+            document.getElementById('max-threshold-value').innerText = document.getElementById('max-threshold').value;
+            document.getElementById('mean-degree-value').innerText = document.getElementById('mean-degree').value;
+            document.getElementById('rewiring-probability-value').innerText = document.getElementById('rewiring-probability').value;
+            document.getElementById('attachment-degree-value').innerText = document.getElementById('attachment-degree').value;
+            document.getElementById('run-speed-value').innerText = document.getElementById('run-speed').value;
+            runSpeed = parseInt(document.getElementById('run-speed').value);
+        }
+
+        function generateRandomGraph(numNodes, meanDegree) {
+            nodes = d3.range(numNodes).map(i => ({ id: i }));
+            links = d3.range(numNodes * meanDegree / 2).map(() => ({
+                source: Math.floor(Math.random() * numNodes),
+                target: Math.floor(Math.random() * numNodes)
+            })).filter(d => d.source !== d.target);
+        }
+
+        function generateSmallWorldGraph(numNodes, rewiringProbability) {
+            nodes = d3.range(numNodes).map(i => ({ id: i }));
+            links = [];
+            const k = 4; // Each node is connected to k nearest neighbors in ring topology
+            for (let i = 0; i < numNodes; i++) {
+                for (let j = 1; j <= k / 2; j++) {
+                    let target = (i + j) % numNodes;
+                    if (Math.random() < rewiringProbability) {
+                        target = Math.floor(Math.random() * numNodes);
+                    }
+                    links.push({ source: i, target: target });
+                }
+            }
+        }
+
+        function generatePreferentialAttachmentGraph(numNodes, attachmentDegree) {
+            nodes = d3.range(numNodes).map(i => ({ id: i }));
+            links = [];
+            const targets = new Set();
+
+            // Start with a fully connected network of `attachmentDegree` + 1 nodes
+            for (let i = 0; i <= attachmentDegree; i++) {
+                for (let j = i + 1; j <= attachmentDegree; j++) {
+                    links.push({ source: i, target: j });
+                    targets.add(i);
+                    targets.add(j);
+                }
+            }
+
+            // Add remaining nodes
+            for (let i = attachmentDegree + 1; i < numNodes; i++) {
+                let currentTargets = Array.from(targets);
+                let selectedTargets = [];
+                for (let j = 0; j < attachmentDegree; j++) {
+                    const target = currentTargets[Math.floor(Math.random() * currentTargets.length)];
+                    selectedTargets.push(target);
+                    currentTargets = currentTargets.filter(t => t !== target); // Ensure unique targets
+                }
+                selectedTargets.forEach(target => {
+                    links.push({ source: i, target: target });
+                    targets.add(i);
+                    targets.add(target);
+                });
+            }
+        }
+
+        function generateLTM() {
+            const numNodes = parseInt(document.getElementById('num-nodes').value);
+            const minThreshold = parseFloat(document.getElementById('min-threshold').value);
+            const maxThreshold = parseFloat(document.getElementById('max-threshold').value);
+            const topology = document.getElementById('network-topology').value;
+
+            if (topology === "random") {
+                const meanDegree = parseInt(document.getElementById('mean-degree').value);
+                generateRandomGraph(numNodes, meanDegree);
+            } else if (topology === "small-world") {
+                const rewiringProbability = parseFloat(document.getElementById('rewiring-probability').value);
+                generateSmallWorldGraph(numNodes, rewiringProbability);
+            } else if (topology === "preferential-attachment") {
+                const attachmentDegree = parseInt(document.getElementById('attachment-degree').value);
+                generatePreferentialAttachmentGraph(numNodes, attachmentDegree);
+            }
+
+            // Assign random thresholds to nodes
+            thresholds = d3.range(numNodes).map(() => minThreshold + Math.random() * (maxThreshold - minThreshold));
+            activeNodes = new Set();
+            seedNode = Math.floor(Math.random() * numNodes);
+            activeNodes.add(seedNode);
+
+            forceSimulation.nodes(nodes);
+            forceSimulation.force("link").links(links);
+            forceSimulation.alpha(1).restart();
+
+            plotDegreeDistribution();
+        }
+
+        async function runCascade() {
+            let changed;
+            do {
+                changed = false;
+                for (const node of nodes) {
+                    await new Promise(resolve => setTimeout(resolve, runSpeed));
+                    highlightNode(node.id);
+                    if (!activeNodes.has(node.id)) {
+                        const neighbors = links.filter(l => l.source.id === node.id || l.target.id === node.id)
+                                                .map(l => l.source.id === node.id ? l.target.id : l.source.id);
+                        const activeNeighbors = neighbors.filter(n => activeNodes.has(n)).length;
+                        if (activeNeighbors / neighbors.length >= thresholds[node.id]) {
+                            activeNodes.add(node.id);
+                            changed = true;
+                        }
+                    }
+                    renderGraph();
+                }
+            } while (changed);
+        }
+
+        function highlightNode(nodeId) {
+            nodeGroup.selectAll(".node")
+                .attr("stroke", d => d.id === nodeId ? "red" : activeNodes.has(d.id) ? "black" : "grey")
+                .attr("stroke-width", d => d.id === nodeId ? 3 : 1.5);
+        }
+
+        function renderGraph() {
+            const linkSelection = linkGroup.selectAll(".link")
+                .data(links, d => `${d.source.id}-${d.target.id}`);
+            linkSelection.enter().append("line")
+                .attr("class", "link")
+                .merge(linkSelection)
+                .attr("x1", d => d.source.x)
+                .attr("y1", d => d.source.y)
+                .attr("x2", d => d.target.x)
+                .attr("y2", d => d.target.y);
+            linkSelection.exit().remove();
+
+            const nodeSelection = nodeGroup.selectAll(".node")
+                .data(nodes, d => d.id);
+            const nodeEnter = nodeSelection.enter().append("circle")
+                .attr("class", "node")
+                .attr("r", 10)
+                .call(d3.drag()
+                    .on("start", dragstarted)
+                    .on("drag", dragged)
+                    .on("end", dragended));
+
+            nodeEnter.merge(nodeSelection)
+                .attr("cx", d => d.x)
+                .attr("cy", d => d.y)
+                .attr("fill", d => {
+                    if (d.id === seedNode) return "green";
+                    if (activeNodes.has(d.id)) return "black";
+                    return "white";
+                })
+                .attr("stroke", d => activeNodes.has(d.id) ? "black" : "grey");
+
+            nodeSelection.exit().remove();
+        }
+
+        function dragstarted(event, d) {
+            if (!event.active) forceSimulation.alphaTarget(0.3).restart();
+            d.fx = d.x;
+            d.fy = d.y;
+        }
+
+        function dragged(event, d) {
+            d.fx = event.x;
+            d.fy = event.y;
+        }
+
+        function dragended(event, d) {
+            if (!event.active) forceSimulation.alphaTarget(0);
+            d.fx = null;
+            d.fy = null;
+        }
+
+        const forceSimulation = d3.forceSimulation()
+            .force("link", d3.forceLink().id(d => d.id).distance(50))
+            .force("charge", d3.forceManyBody().strength(-100))
+            .force("center", d3.forceCenter(width / 2, height / 2))
+            .force("x", d3.forceX().strength(0.1).x(width / 2))
+            .force("y", d3.forceY().strength(0.1).y(height / 2))
+            .nodes(nodes)
+            .on("tick", renderGraph);
+
+        forceSimulation.force("link").links(links);
+
+        async function generateAndRunCascade() {
+            generateLTM();
+            await runCascade();
+        }
+
+        document.getElementById('generate-run-cascade').addEventListener('click', generateAndRunCascade);
+        document.getElementById('network-topology').addEventListener('change', updateParametersVisibility);
+        document.getElementById('num-nodes').addEventListener('input', updateSliderValues);
+        document.getElementById('min-threshold').addEventListener('input', updateSliderValues);
+        document.getElementById('max-threshold').addEventListener('input', updateSliderValues);
+        document.getElementById('mean-degree').addEventListener('input', updateSliderValues);
+        document.getElementById('rewiring-probability').addEventListener('input', updateSliderValues);
+        document.getElementById('attachment-degree').addEventListener('input', updateSliderValues);
+        document.getElementById('run-speed').addEventListener('input', updateSliderValues);
+
+        function updateParametersVisibility() {
+            const topology = document.getElementById('network-topology').value;
+            document.getElementById('random-parameters').style.display = topology === 'random' ? 'block' : 'none';
+            document.getElementById('small-world-parameters').style.display = topology === 'small-world' ? 'block' : 'none';
+            document.getElementById('preferential-attachment-parameters').style.display = topology === 'preferential-attachment' ? 'block' : 'none';
+        }
+
+        function plotDegreeDistribution() {
+            const degreeCount = {};
+            links.forEach(link => {
+                degreeCount[link.source.id] = (degreeCount[link.source.id] || 0) + 1;
+                degreeCount[link.target.id] = (degreeCount[link.target.id] || 0) + 1;
+            });
+
+            const degreeDistribution = Object.values(degreeCount).reduce((acc, degree) => {
+                acc[degree] = (acc[degree] || 0) + 1;
+                return acc;
+            }, {});
+
+            const data = Object.keys(degreeDistribution).map(d => ({
+                degree: +d,
+                count: degreeDistribution[d]
+            }));
+
+            const margin = { top: 20, right: 20, bottom: 30, left: 40 };
+            const chartWidth = 300 - margin.left - margin.right;
+            const chartHeight = 200 - margin.top - margin.bottom;
+
+            const x = d3.scaleLinear()
+                .domain(d3.extent(data, d => d.degree))
+                .range([0, chartWidth]);
+
+            const y = d3.scaleLinear()
+                .domain([0, d3.max(data, d => d.count)])
+                .range([chartHeight, 0]);
+
+            d3.select("#degree-distribution").selectAll("*").remove();
+
+            const svg = d3.select("#degree-distribution").append("svg")
+                .attr("width", chartWidth + margin.left + margin.right)
+                .attr("height", chartHeight + margin.top + margin.bottom)
+                .append("g")
+                .attr("transform", `translate(${margin.left},${margin.top})`);
+
+            svg.append("g")
+                .attr("transform", `translate(0,${chartHeight})`)
+                .call(d3.axisBottom(x).ticks(5));
+
+            svg.append("g")
+                .call(d3.axisLeft(y).ticks(5));
+
+            svg.selectAll(".bar")
+                .data(data)
+                .enter().append("rect")
+                .attr("class", "bar")
+                .attr("x", d => x(d.degree))
+                .attr("y", d => y(d.count))
+                .attr("width", chartWidth / data.length - 1)
+                .attr("height", d => chartHeight - y(d.count));
+        }
+
+        updateSliderValues();
+        updateParametersVisibility();
+        generateLTM();
+    </script>
+</body>
+</html>
+
