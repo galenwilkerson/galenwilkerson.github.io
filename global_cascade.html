@@ -30,8 +30,7 @@
 
     <script>
         // Parameters
-        const phi = 0.18;  // Node threshold
-        const Phi = 0.1;  // Global threshold
+        const phi = 0.1;
         const numNodes = 10000;
         const zValues = Array.from({ length: 20 }, (_, i) => (i + 1) * 0.5);
         const numSimulations = 100;
@@ -78,7 +77,7 @@
             } while (changed);
 
             const cascadeSize = states.reduce((count, state) => count + state, 0);
-            return cascadeSize / numNodes >= Phi; // Global cascade if more than Phi fraction of nodes are active
+            return cascadeSize / numNodes >= 0.1; // Global cascade if more than 10% nodes are active
         }
 
         // Function to run simulations and calculate frequencies
