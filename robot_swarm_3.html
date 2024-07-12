@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<!-- author: Galen Wilkerson, copyright 2024></!-->
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Robots and Oil Blobs Simulation</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body {
+            display: flex;
+        }
+        #canvas {
+            border: 1px solid black;
+        }
+        #sidebar {
+            margin-left: 20px;
+            display: flex;
+            flex-direction: column;
+        }
+        .slider-container {
+            margin: 10px 0;
+        }
+        .slider-container label {
+            margin-bottom: 5px;
+        }
+    </style>
+</head>
+<body>
+    <svg id="canvas"></svg>
+    <div id="sidebar">
+        <div class="slider-container">
+            <label for="numRobots">Number of Robots (N)</label>
+            <input type="range" id="numRobots" min="1" max="100" value="20">
+            <span id="numRobotsValue">50</span>
+        </div>
+        <div class="slider-container">
+            <label for="numBlobs">Number of Oil Blobs (b)</label>
+            <input type="range" id="numBlobs" min="1" max="30" value="20">
+            <span id="numBlobsValue">10</span>
+        </div>
+        <div class="slider-container">
+            <label for="blobSize">Average Blob Size (S)</label>
+            <input type="range" id="blobSize" min="1" max="30" value="15">
+            <span id="blobSizeValue">4</span>
+        </div>
+        <div class="slider-container">
+            <label for="cv">Blob Size Coefficient of Variation (CV)</label>
+            <input type="range" id="cv" min="0.1" max="1" step="0.1" value="0.5">
+            <span id="cvValue">0.5</span>
+        </div>
+        <div class="slider-container">
+            <label for="stepSize">Robot Step Size (v)</label>
+            <input type="range" id="stepSize" min="0.1" max="20" step="0.1" value="10">
+            <span id="stepSizeValue">5</span>
+        </div>
+        <div class="slider-container">
+            <label for="speed">Simulation Speed</label>
+            <input type="range" id="speed" min="10" max="1000" step="10" value="10">
+            <span id="speedValue">10</span>
+        </div>
+        <div class="slider-container">
+            <label for="radius">Connection Radius</label>
+            <input type="range" id="radius" min="5" max="200" value="200">
+            <span id="radiusValue">100</span>
+        </div>
+        <div class="slider-container">
+            <label for="probability">Connection Probability (p)</label>
+            <input type="range" id="probability" min="0.01" max="1" step="0.01" value="1">
+            <span id="probabilityValue">1</span>
+        </div>
+        <div class="slider-container">
+            <label for="minThreshold">Min Threshold</label>
+            <input type="range" id="minThreshold" min="0" max="1" step="0.01" value="0.1">
+            <span id="minThresholdValue">0.1</span>
+        </div>
+        <div class="slider-container">
+            <label for="maxThreshold">Max Threshold</label>
+            <input type="range" id="maxThreshold" min="0" max="1" step="0.01" value="0.1">
+            <span id="maxThresholdValue">0.1</span>
+        </div>
+        <div class="slider-container">
+            <label for="consumptionRate">Oil Consumption Rate</label>
+            <input type="range" id="consumptionRate" min="0.1" max="3" step="0.1" value="1">
+            <span id="consumptionRateValue">1</span>
+        </div>
+        <button id="startButton">Start</button>
+    </div>
+    <script>
+        const width = 800, height = 800; // Size of the canvas
+        let N = 20; // Number of robots
+        let b = 20; // Number of oil blobs
+        let S = 15; // Average size of oil blobs
+        let cv = 0.5; // Coefficient of variation of oil blob size
+        let v = 20; // Step size of robots
+        let speed = 10; // Simulation speed
+        let radius = 100; // Connection radius
+        let p = 1; // Connection probability
+        let minThreshold = 0.18; // Min threshold
+        let maxThreshold = 0.18; // Max threshold
+        let consumptionRate = 1; // Oil consumption rate per robot
+
+        const svg = d3.select("#canvas").attr("width", width).attr("height", height);
+
+        function updateValue(sliderId, displayId) {
+            const value = document.getElementById(sliderId).value;
+            document.getElementById(displayId).innerText = value;
+            return value;
+        }
+
+        document.getElementById('numRobots').addEventListener('input', () => N = updateValue('numRobots', 'numRobotsValue'));
+        document.getElementById('numBlobs').addEventListener('input', () => b = updateValue('numBlobs', 'numBlobsValue'));
+        document.getElementById('blobSize').addEventListener('input', () => S = updateValue('blobSize', 'blobSizeValue'));
+        document.getElementById('cv').addEventListener('input', () => cv = updateValue('cv', 'cvValue'));
+        document.getElementById('stepSize').addEventListener('input', () => v = updateValue('stepSize', 'stepSizeValue'));
+        document.getElementById('speed').addEventListener('input', () => speed = updateValue('speed', 'speedValue'));
+        document.getElementById('radius').addEventListener('input', () => radius = updateValue('radius', 'radiusValue'));
+        document.getElementById('probability').addEventListener('input', () => p = updateValue('probability', 'probabilityValue'));
+        document.getElementById('minThreshold').addEventListener('input', () => minThreshold = updateValue('minThreshold', 'minThresholdValue'));
+        document.getElementById('maxThreshold').addEventListener('input', () => maxThreshold = updateValue('maxThreshold', 'maxThresholdValue'));
+        document.getElementById('consumptionRate').addEventListener('input', () => consumptionRate = updateValue('consumptionRate', 'consumptionRateValue'));
+
+        document.getElementById('startButton').addEventListener('click', startSimulation);
+
+        let robotElements;
+        let interval;
+
+        function startSimulation() {
+            svg.selectAll("*").remove();
+
+            // Create oil blobs with random positions and sizes
+            const blobs = Array.from({length: b}, () => ({
+                x: Math.random() * width,
+                y: Math.random() * height,
+                radius: Math.max(1, d3.randomNormal(S, cv * S)()) // Ensure radius is at least 1
+            }));
+
+            // Draw oil blobs
+            const blobElements = svg.selectAll(".blob")
+                .data(blobs)
+                .enter()
+                .append("circle")
+                .attr("class", "blob")
+                .attr("cx", d => d.x)
+                .attr("cy", d => d.y)
+                .attr("r", d => d.radius)
+                .style("fill", "black");
+
+            // Create robots with random initial positions and thresholds
+            const robots = Array.from({length: N}, () => ({
+                x: Math.random() * width,
+                y: Math.random() * height,
+                threshold: minThreshold + Math.random() * (maxThreshold - minThreshold),
+                state: 0 // Initially inactive
+            }));
+
+            // Draw robots
+            robotElements = svg.selectAll(".robot")
+                .data(robots)
+                .enter()
+                .append("circle")
+                .attr("class", "robot")
+                .attr("cx", d => d.x)
+                .attr("cy", d => d.y)
+                .attr("r", 5)
+                .style("fill", "red");
+
+            // Stop previous interval if exists
+            if (interval) clearInterval(interval);
+
+            // Start new interval
+            interval = setInterval(updatePositions, speed);
+        }
+
+        // Function to update position of each robot randomly
+        function updatePositions() {
+            const blobs = svg.selectAll(".blob").data();
+            robotElements
+                .attr("cx", d => {
+                    d.x += (Math.random() - 0.5) * v;
+                    d.x = Math.min(Math.max(d.x, 0), width); // Keep within bounds
+                    return d.x;
+                })
+                .attr("cy", d => {
+                    d.y += (Math.random() - 0.5) * v;
+                    d.y = Math.min(Math.max(d.y, 0), height); // Keep within bounds
+                    return d.y;
+                });
+
+            // Check for oil blob collisions and update state
+            robotElements.each(d => {
+                let inBlob = false;
+                for (let i = 0; i < blobs.length; i++) {
+                    const dx = d.x - blobs[i].x;
+                    const dy = d.y - blobs[i].y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    if (distance <= blobs[i].radius) {
+                        d.state = 1; // Set state to active
+                        inBlob = true;
+                        blobs[i].radius = Math.max(0, blobs[i].radius - consumptionRate); // Reduce blob size
+                        break;
+                    }
+                }
+                if (!inBlob) {
+                    d.state = 0; // Set state to inactive
+                }
+            });
+
+            // Update blob sizes
+            svg.selectAll(".blob")
+                .data(blobs)
+                .attr("r", d => d.radius);
+
+            // Update colors based on state
+            robotElements.style("fill", d => d.state === 1 ? "green" : "red");
+
+            // Draw connections and update states using LTM
+            const connections = [];
+            const robots = robotElements.data();
+            const newStates = robots.map(d => d.state); // Copy current states
+
+            for (let i = 0; i < robots.length; i++) {
+                let activeNeighbors = 0;
+                for (let j = 0; j < robots.length; j++) {
+                    if (i !== j) {
+                        const dx = robots[i].x - robots[j].x;
+                        const dy = robots[i].y - robots[j].y;
+                        const distance = Math.sqrt(dx * dx + dy * dy);
+                        if (distance <= radius) {
+                            if (robots[j].state === 1) activeNeighbors++;
+                            if (Math.random() < p) {
+                                connections.push({x1: robots[i].x, y1: robots[i].y, x2: robots[j].x, y2: robots[j].y});
+                            }
+                        }
+                    }
+                }
+                const degree = robots.filter((_, j) => i !== j && Math.sqrt(Math.pow(robots[i].x - robots[j].x, 2) + Math.pow(robots[i].y - robots[j].y, 2)) <= radius).length;
+                if (activeNeighbors / degree >= robots[i].threshold) {
+                    newStates[i] = 1; // Activate based on threshold
+                }
+            }
+
+            // Update robots' states
+            for (let i = 0; i < robots.length; i++) {
+                if (robots[i].state === 0 && newStates[i] === 1) {
+                    // If a non-seed (not touching oil) node becomes active from the cascade, move towards centroid of active neighbors
+                    let activeNeighbors = robots.filter((_, j) => i !== j && robots[j].state === 1 && Math.sqrt(Math.pow(robots[i].x - robots[j].x, 2) + Math.pow(robots[i].y - robots[j].y, 2)) <= radius);
+                    if (activeNeighbors.length > 0) {
+                        const centroidX = d3.mean(activeNeighbors, d => d.x);
+                        const centroidY = d3.mean(activeNeighbors, d => d.y);
+                        robots[i].x += (centroidX - robots[i].x) * 0.1; // Move towards centroid
+                        robots[i].y += (centroidY - robots[i].y) * 0.1;
+                    }
+                }
+                robots[i].state = newStates[i]; // Update state
+            }
+
+            // Draw connections
+            svg.selectAll(".connection").remove();
+            svg.selectAll(".connection")
+                .data(connections)
+                .enter()
+                .append("line")
+                .attr("class", "connection")
+                .attr("x1", d => d.x1)
+                .attr("y1", d => d.y1)
+                .attr("x2", d => d.x2)
+                .attr("y2", d => d.y2)
+                .attr("stroke", "blue")
+                .attr("stroke-width", 1);
+        }
+
+        // Run the simulation on page load
+        document.addEventListener('DOMContentLoaded', (event) => {
+            startSimulation();
+        });
+    </script>
+</body>
+</html>
+
