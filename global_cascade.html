@@ -31,7 +31,7 @@
     <script>
         // Parameters
         const phi = 0.1;
-        const numNodes = 1000;
+        const numNodes = 10000;
         const zValues = Array.from({ length: 20 }, (_, i) => (i + 1) * 0.5);
         const numSimulations = 100;
 
@@ -53,8 +53,13 @@
         // Function to simulate a cascade on a graph
         function simulateCascade(graph) {
             const states = new Array(numNodes).fill(0);
-            const initialNode = Math.floor(Math.random() * numNodes);
-            states[initialNode] = 1;
+            const initialFraction = 0.01;
+            const initialNodes = Math.floor(numNodes * initialFraction);
+
+            // Randomly activate initial nodes
+            for (let i = 0; i < initialNodes; i++) {
+                states[Math.floor(Math.random() * numNodes)] = 1;
+            }
 
             let changed;
             do {
