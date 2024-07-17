@@ -56,9 +56,10 @@
         <p>Reference: Wilkerson, G. et al. "Spontaneous Emergence of Computation in Network Cascades." Nature Scientific Reports.</p>
     </div>
     <div class="controls">
-    <h1>LTM Simulation</h1> <!-- Add this line -->
-    <p>This simulation demonstrates the logic functions computed by the linear threshold model.</p>
+    <h1>LTM Simulation</h1>
+    <p>This simulation demonstrates the logic functions computed by cascades in the linear threshold model.</p>
     <p>Use the sliders below to adjust the parameters of the simulation.</p>
+    <p>Node border colors correspond to thresholds.  Green nodes are inputs.</p>
         <div class="slider-container">
             <div class="slider-label">Number of Nodes:</div>
             <input type="range" id="numNodesSlider" min="5" max="100" value="50">
@@ -157,6 +158,18 @@
                 .attr("stroke", (d, i) => i < numInputNodes ? "green" : d3.interpolateGreys(thresholds[i]))
                 .attr("stroke-width", 2); // Thicker node edges
 
+            // Add labels to the input nodes
+            svg.selectAll(".node-label")
+                .data(G.filter((d, i) => i < numInputNodes))
+                .enter().append("text")
+                .attr("class", "node-label")
+                .attr("x", d => d.x)
+                .attr("y", d => d.y)
+                .attr("dy", ".35em")
+                .attr("text-anchor", "middle")
+                .attr("fill", "black")
+                .text((d, i) => String.fromCharCode(65 + i)); // Label with "A", "B", etc.
+
             simulation = d3.forceSimulation(G)
                 .force("link", d3.forceLink(links).id(d => d.id))
                 .force("charge", d3.forceManyBody().strength(-100))
@@ -175,6 +188,10 @@
                 node
                     .attr("cx", d => d.x = Math.max(10, Math.min(width - 10, d.x)))
                     .attr("cy", d => d.y = Math.max(10, Math.min(height - 10, d.y)));
+
+                svg.selectAll(".node-label")
+                    .attr("x", d => d.x)
+                    .attr("y", d => d.y);
             });
 
             return { G, links, node };
