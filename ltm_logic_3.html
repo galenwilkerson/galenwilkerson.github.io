@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<!-- Author: Galen Wilkerson, 2024></!-->
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>LTM Simulation</title>
+    
+    <script src="https://d3js.org/d3.v6.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+        }
+        .sidebar {
+            width: 200px;
+            padding: 10px;
+        }
+        .main {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .controls {
+            width: 300px;
+            padding: 10px;
+        }
+        .slider-container {
+            margin-bottom: 20px;
+        }
+        .slider-label {
+            margin-bottom: 5px;
+        }
+        #network-svg {
+            border: 1px solid black;
+        }
+        #truthTable table {
+            border-collapse: collapse;
+            width: 100%;
+            font-size: 12px; /* Downscale the text */
+        }
+        #truthTable th, #truthTable td {
+            border: 1px solid black;
+            padding: 5px;
+            text-align: center;
+        }
+        #truthTable tr.highlight {
+            background-color: yellow;
+        }
+    </style>
+</head>
+<body>
+    <div class="sidebar" id="truthTable"></div>
+    <div class="main">
+        <svg id="network-svg" width="800" height="600"></svg>
+    </div>
+    <div class="controls">
+    <h1>LTM Simulation</h1> <!-- Add this line -->
+    <p>This simulation demonstrates the logic functions computed by the linear threshold model.</p>
+    <p>Use the sliders below to adjust the parameters of the simulation.</p>
+        <div class="slider-container">
+            <div class="slider-label">Number of Nodes:</div>
+            <input type="range" id="numNodesSlider" min="5" max="100" value="10">
+            <span id="numNodesValue">10</span>
+        </div>
+        <div class="slider-container">
+            <div class="slider-label">Number of Input Nodes:</div>
+            <input type="range" id="numInputNodesSlider" min="1" max="10" value="2">
+            <span id="numInputNodesValue">2</span>
+        </div>
+        <div class="slider-container">
+            <div class="slider-label">Mean Degree:</div>
+            <input type="range" id="meanDegreeSlider" min="1" max="10" value="3">
+            <span id="meanDegreeValue">3</span>
+        </div>
+        <div class="slider-container">
+            <div class="slider-label">Frame Duration (ms):</div>
+            <input type="range" id="frameDurationSlider" min="1" max="2000" value="500">
+            <span id="frameDurationValue">500</span>
+        </div>
+        <div class="slider-container">
+            <div class="slider-label">Min Threshold:</div>
+            <input type="range" id="minThresholdSlider" min="0" max="1" step="0.01" value="0.1">
+            <span id="minThresholdValue">0.1</span>
+        </div>
+        <div class="slider-container">
+            <div class="slider-label">Max Threshold:</div>
+            <input type="range" id="maxThresholdSlider" min="0" max="1" step="0.01" value="0.9">
+            <span id="maxThresholdValue">0.9</span>
+        </div>
+        <button id="startButton">Start</button>
+        <button id="stopButton">Stop</button>
+        <button id="regenerateButton">Regenerate</button>
+    </div>
+
+    <script>
+        let width = 800;
+        let height = 600;
+        let simulation;
+        let active = [];
+        let thresholds = [];
+        let G;
+        let numNodes, numInputNodes, meanDegree, frameDuration, minThreshold, maxThreshold;
+        let running = false;
+        let inputCombinations = [];
+        let currentCombinationIndex = 0;
+        const maxSteps = 100; // Set a reasonable large value for max steps
+
+        const svg = d3.select("#network-svg")
+            .attr("width", width)
+            .attr("height", height);
+
+        function updateSliders() {
+            numNodes = +document.getElementById("numNodesSlider").value;
+            numInputNodes = +document.getElementById("numInputNodesSlider").value;
+            meanDegree = +document.getElementById("meanDegreeSlider").value;
+            frameDuration = +document.getElementById("frameDurationSlider").value;
+            minThreshold = +document.getElementById("minThresholdSlider").value;
+            maxThreshold = +document.getElementById("maxThresholdSlider").value;
+            
+            document.getElementById("numNodesValue").textContent = numNodes;
+            document.getElementById("numInputNodesValue").textContent = numInputNodes;
+            document.getElementById("meanDegreeValue").textContent = meanDegree;
+            document.getElementById("frameDurationValue").textContent = frameDuration;
+            document.getElementById("minThresholdValue").textContent = minThreshold.toFixed(2);
+            document.getElementById("maxThresholdValue").textContent = maxThreshold.toFixed(2);
+        }
+
+        function initializeNetwork() {
+            G = d3.range(numNodes).map(d => ({ id: d }));
+            let links = [];
+
+            for (let i = 0; i < numNodes; i++) {
+                for (let j = i + 1; j < numNodes; j++) {
+                    if (Math.random() < meanDegree / numNodes) {
+                        links.push({ source: i, target: j });
+                    }
+                }
+            }
+
+            thresholds = Array.from({ length: numNodes }, () => Math.random() * (maxThreshold - minThreshold) + minThreshold);
+            active = Array.from({ length: numNodes }, () => false);
+
+            const link = svg.selectAll(".link")
+                .data(links)
+                .enter().append("line")
+                .attr("class", "link")
+                .attr("stroke", "#999");
+
+            const node = svg.selectAll(".node")
+                .data(G)
+                .enter().append("circle")
+                .attr("class", "node")
+                .attr("r", (d, i) => i < numInputNodes ? 10 : 5)
+                .attr("fill", "white")
+                .attr("stroke", (d, i) => i < numInputNodes ? "green" : d3.interpolateGreys(thresholds[i]))
+                .attr("stroke-width", 2); // Thicker node edges
+
+            simulation = d3.forceSimulation(G)
+                .force("link", d3.forceLink(links).id(d => d.id))
+                .force("charge", d3.forceManyBody().strength(-100))
+                .force("center", d3.forceCenter(width / 2, height / 2))
+                .force("x", d3.forceX(width / 2).strength(0.1))
+                .force("y", d3.forceY(height / 2).strength(0.1))
+                .force("collision", d3.forceCollide().radius(20));
+
+            simulation.on("tick", () => {
+                link
+                    .attr("x1", d => d.source.x)
+                    .attr("y1", d => d.source.y)
+                    .attr("x2", d => d.target.x)
+                    .attr("y2", d => d.target.y);
+
+                node
+                    .attr("cx", d => d.x = Math.max(10, Math.min(width - 10, d.x)))
+                    .attr("cy", d => d.y = Math.max(10, Math.min(height - 10, d.y)));
+            });
+
+            return { G, links, node };
+        }
+
+        function step() {
+            let newActive = active.slice();
+
+            G.forEach((node, index) => {
+                let neighbors = G.filter(d => simulation.force("link").links().some(link => 
+                    (link.source.id === node.id && link.target.id === d.id) || 
+                    (link.target.id === node.id && link.source.id === d.id)
+                ));
+
+                let activeNeighbors = neighbors.filter(n => active[n.id]);
+                let fractionActiveNeighbors = activeNeighbors.length / neighbors.length;
+
+                if (fractionActiveNeighbors >= thresholds[index] && !active[index]) {
+                    newActive[index] = true;
+                }
+            });
+
+            if (newActive.some((state, i) => state !== active[i])) {
+                active = newActive;
+                return true;
+            } else {
+                return false;
+            }
+        }
+
+        function runCascade() {
+            let stepCount = 0;
+            while (step() && stepCount < maxSteps) {
+                stepCount++;
+            }
+        }
+
+        function updateVisualization() {
+            svg.selectAll(".node")
+                .attr("fill", (d, i) => active[i] ? "black" : "white");
+
+            highlightTruthTableRow(currentCombinationIndex);
+
+            if (running) {
+                setTimeout(() => {
+                    currentCombinationIndex = (currentCombinationIndex + 1) % inputCombinations.length;
+                    runCombination();
+                }, frameDuration);
+            }
+        }
+
+        function createTruthTable() {
+            inputCombinations = [];
+            let table = "<table><tr>";
+            for (let i = 0; i < numInputNodes; i++) {
+                table += `<th>${String.fromCharCode(65 + i)}</th>`;
+            }
+            table += "</tr>";
+
+            for (let i = 0; i < (1 << numInputNodes); i++) {
+                let combination = [];
+                table += "<tr>";
+                for (let j = 0; j < numInputNodes; j++) {
+                    let value = (i >> j) & 1;
+                    table += `<td>${value}</td>`;
+                    combination.push(!!value);
+                }
+                table += "</tr>";
+                inputCombinations.push(combination);
+            }
+            table += "</table>";
+            document.getElementById("truthTable").innerHTML = table;
+        }
+
+        function highlightTruthTableRow(index) {
+            const rows = document.querySelectorAll("#truthTable table tr");
+            rows.forEach((row, i) => {
+                row.classList.toggle("highlight", i === index + 1);
+            });
+        }
+
+        function runCombination() {
+            active = Array.from({ length: numNodes }, (_, i) => i < numInputNodes ? inputCombinations[currentCombinationIndex][i] : false);
+            runCascade();
+            updateVisualization();
+        }
+
+        document.getElementById("startButton").addEventListener("click", () => {
+            running = true;
+            runCombination();
+        });
+
+        document.getElementById("stopButton").addEventListener("click", () => {
+            running = false;
+        });
+
+        document.getElementById("regenerateButton").addEventListener("click", () => {
+            location.reload();
+        });
+
+        document.getElementById("numNodesSlider").addEventListener("input", updateSliders);
+        document.getElementById("numInputNodesSlider").addEventListener("input", updateSliders);
+        document.getElementById("meanDegreeSlider").addEventListener("input", updateSliders);
+        document.getElementById("frameDurationSlider").addEventListener("input", updateSliders);
+        document.getElementById("minThresholdSlider").addEventListener("input", updateSliders);
+        document.getElementById("maxThresholdSlider").addEventListener("input", updateSliders);
+
+        updateSliders();
+        initializeNetwork();  // Initialize the network on load with default settings
+        createTruthTable();   // Create the truth table on load with default settings
+    </script>
+</body>
+</html>
+
