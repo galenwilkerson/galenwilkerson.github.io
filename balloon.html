@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Hot Air Balloon Game</title>
+  <style>
+    /* Add some basic styling to make the game look nicer */
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+    }
+    #game-container {
+      width: 800px;
+      height: 600px;
+      border: 1px solid black;
+      position: relative;
+    }
+    #balloon {
+      width: 50px;
+      height: 50px;
+      background-color: #ff9900;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+    }
+    #burner {
+      width: 20px;
+      height: 20px;
+      background-color: #ff0000;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+    }
+    #wind-indicator {
+      font-size: 24px;
+      position: absolute;
+      top: 10px;
+      left: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Hot Air Balloon Game</h1>
+  <div id="game-container">
+    <div id="balloon"></div>
+    <div id="burner"></div>
+    <div id="wind-indicator"></div>
+  </div>
+  <script>
+    // Initialize the game state
+    let balloonX = 400;
+    let balloonY = 300;
+    let burnerOn = false;
+    let windDirection = 0;
+    let windSpeed = 0;
+    let windHeight = 0;
+    let lag = 0;
+
+    // Set up the game loop
+    setInterval(updateGame, 16); // 16ms = 60fps
+
+    // Update the game state
+    function updateGame() {
+      // Update the wind
+      windDirection = Math.random() * 360;
+      windSpeed = Math.random() * 5;
+      windHeight = Math.random() * 600;
+
+      // Update the balloon's position
+      if (burnerOn) {
+        balloonY -= 2;
+      } else {
+        balloonY += 2;
+      }
+      balloonX += windSpeed * Math.cos(windDirection * Math.PI / 180);
+
+      // Apply the lag
+      lag += (balloonY - 300) * 0.1;
+      balloonY = 300 + lag;
+
+      // Keep the balloon within the game container
+      if (balloonX < 0) {
+        balloonX = 0;
+      } else if (balloonX > 800) {
+        balloonX = 800;
+      }
+      if (balloonY < 0) {
+        balloonY = 0;
+      } else if (balloonY > 600) {
+        balloonY = 600;
+      }
+
+      // Update the game display
+      document.getElementById('balloon').style.top = balloonY + 'px';
+      document.getElementById('balloon').style.left = balloonX + 'px';
+      document.getElementById('wind-indicator').textContent = `Wind: ${windSpeed.toFixed(1)}m/s at ${windDirection.toFixed(1)}°`;
+    }
+
+    // Handle user input
+    document.addEventListener('keydown', (event) => {
+      if (event.key === ' ') {
+        burnerOn = true;
+      }
+    });
+    document.addEventListener('keyup', (event) => {
+      if (event.key === ' ') {
+        burnerOn = false;
+      }
+    });
+  </script>
+</body>
+</html>
