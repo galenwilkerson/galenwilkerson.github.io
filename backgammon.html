@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Backgammon Game with DQN</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+        }
+        .board {
+            display: grid;
+            grid-template-columns: repeat(12, 50px);
+            grid-gap: 5px;
+            justify-content: center;
+            margin: 20px auto;
+            width: 630px;
+        }
+        .triangle {
+            width: 50px;
+            height: 200px;
+            background-color: lightgrey;
+            clip-path: polygon(50% 0%, 100% 100%, 0% 100%);
+            position: relative;
+        }
+        .piece {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            position: absolute;
+            bottom: 0;
+            left: 5px;
+        }
+        .piece.white {
+            background-color: white;
+        }
+        .piece.black {
+            background-color: black;
+        }
+        .controls {
+            margin-top: 20px;
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+</head>
+<body>
+    <h1>Backgammon Game with DQN</h1>
+    <div class="board" id="board">
+        <!-- Triangles will be generated here -->
+    </div>
+    <div class="controls">
+        <button id="rollDice">Roll Dice</button>
+        <button id="aiMove">AI Move</button>
+        <p id="diceResult"></p>
+    </div>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const boardElement = document.getElementById('board');
+            const rollDiceButton = document.getElementById('rollDice');
+            const aiMoveButton = document.getElementById('aiMove');
+            const diceResult = document.getElementById('diceResult');
+
+            // Create 24 triangles
+            for (let i = 0; i < 24; i++) {
+                const triangle = document.createElement('div');
+                triangle.className = 'triangle';
+                triangle.id = `triangle-${i + 1}`;
+                boardElement.appendChild(triangle);
+            }
+
+            // Add pieces to the board
+            const initialPieces = {
+                1: { color: 'black', count: 2 },
+                6: { color: 'white', count: 5 },
+                8: { color: 'white', count: 3 },
+                12: { color: 'black', count: 5 },
+                13: { color: 'white', count: 5 },
+                17: { color: 'black', count: 3 },
+                19: { color: 'black', count: 5 },
+                24: { color: 'white', count: 2 },
+            };
+
+            for (const [pos, { color, count }] of Object.entries(initialPieces)) {
+                const triangle = document.getElementById(`triangle-${pos}`);
+                for (let i = 0; i < count; i++) {
+                    const piece = document.createElement('div');
+                    piece.className = `piece ${color}`;
+                    piece.style.bottom = `${i * 45}px`;
+                    triangle.appendChild(piece);
+                }
+            }
+
+            rollDiceButton.addEventListener('click', () => {
+                const dice1 = Math.floor(Math.random() * 6) + 1;
+                const dice2 = Math.floor(Math.random() * 6) + 1;
+                diceResult.textContent = `Dice Roll: ${dice1} and ${dice2}`;
+            });
+
+            // Initialize TensorFlow.js model for DQN
+            const model = tf.sequential();
+            model.add(tf.layers.dense({ units: 128, inputShape: [24], activation: 'relu' }));
+            model.add(tf.layers.dense({ units: 24, activation: 'softmax' }));
+            model.compile({ optimizer: 'adam', loss: 'meanSquaredError' });
+
+            aiMoveButton.addEventListener('click', () => {
+                const boardState = getBoardState();
+                const input = tf.tensor2d([boardState]);
+                const prediction = model.predict(input);
+                prediction.array().then(array => {
+                    const move = array[0].indexOf(Math.max(...array[0]));
+                    makeMove(move);
+                });
+            });
+
+            function getBoardState() {
+                // Simplified function to get board state as an array
+                const state = new Array(24).fill(0);
+                for (let i = 0; i < 24; i++) {
+                    const triangle = document.getElementById(`triangle-${i + 1}`);
+                    const pieces = triangle.getElementsByClassName('piece');
+                    state[i] = pieces.length > 0 && pieces[0].classList.contains('white') ? pieces.length : -pieces.length;
+                }
+                return state;
+            }
+
+            function makeMove(move) {
+                // Simplified function to make a move based on AI prediction
+                console.log(`AI suggests moving piece to position ${move + 1}`);
+                // Logic to move piece can be added here
+            }
+        });
+    </script>
+</body>
+</html>
