@@ -21,7 +21,7 @@ body {
 #left-sidebar, #right-sidebar {
     width: 20%;
     background-color: #f4f4f4;
-    padding: 10px;
+    padding: 50px;
     overflow: auto;
 }
 #main-canvas {
