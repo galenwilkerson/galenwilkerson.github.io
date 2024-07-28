@@ -1,1 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Graph with Sidebars</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <header>
+        <h1>Network Insight Studio</h1>
+    </header>
+    <div id="left-sidebar">
+        <h3>Settings</h3>
+        <label for="network-select">Choose a network topology:</label>
+        <select id="network-select">
+            <option value="draw_your_own">Draw Your Own</option>
+            <option value="complete_graph">Complete Graph</option>
+            <option value="cycle_graph">Cycle Graph</option>
+            <option value="path_graph">Path Graph</option>
+            <option value="star_graph">Star Graph</option>
+            <option value="wheel_graph">Wheel Graph</option>
+            <option value="grid_graph">Grid Graph</option>
+            <option value="erdos_renyi_graph">Erdős-Rényi Graph</option>
+            <option value="barabasi_albert_graph">Barabási-Albert Graph</option>
+            <option value="watts_strogatz_graph">Watts-Strogatz Graph</option>
+            <option value="random_regular_graph">Random Regular Graph</option>
+            <option value="small_world_graph">Small-World Graph</option>
+            <option value="ladder_graph">Ladder Graph</option>
+            <option value="complete_bipartite_graph">Bipartite Graph</option>
+            <option value="balanced_tree">K-ary Tree</option>
+            <option value="hypercube_graph">Hypercube Graph</option>
+            <option value="clique_graph">Clique Graph</option>
+            <option value="circular_ladder_graph">Circular Ladder Graph</option>
+            <option value="random_geometric_graph">Random Geometric Graph</option>
+            <option value="dorogovtsev_goltsev_mendes_graph">Dorogovtsev-Goltsev-Mendes Graph</option>
+            <option value="krackhardt_kite_graph">Krackhardt Kite Graph</option>
+            <option value="lollipop_graph">Lollipop Graph</option>
+            <option value="petersen_graph">Petersen Graph</option>
+            <option value="power_law_tree">Power Law Tree</option>
+            <!-- Add options for Neural Networks and Deep Learning Topologies -->
+            <option value="fnn">Feedforward Neural Network (FNN)</option>
+            <option value="cnn">Convolutional Neural Network (CNN)</option>
+            <option value="rnn">Recurrent Neural Network (RNN)</option>
+            <option value="lstm">Long Short-Term Memory (LSTM)</option>
+            <option value="gru">Gated Recurrent Unit (GRU)</option>
+            <option value="autoencoder">Autoencoder</option>
+            <option value="vae">Variational Autoencoder (VAE)</option>
+            <option value="gan">Generative Adversarial Network (GAN)</option>
+            <option value="transformer">Transformer Network</option>
+            <option value="resnet">Residual Network (ResNet)</option>
+            <option value="densenet">DenseNet</option>
+            <option value="attention_mechanisms">Attention Mechanisms</option>
+            <option value="rl_architectures">Reinforcement Learning Architectures</option>
+            <option value="capsule_network">Capsule Network</option>
+            <option value="unet">U-Net</option>
+            <option value="gnn">Graph Neural Network (GNN)</option>
+            <option value="birnn">Bidirectional RNN (Bi-RNN)</option>
+            <option value="som">Self-Organizing Maps (SOM)</option>
+            <option value="rbfn">Radial Basis Function Network (RBFN)</option>
+            <option value="mlp">Multilayer Perceptron (MLP)</option>
+        </select>
+        <div id="sliders"></div>
+        <button id="create-network">Create Network</button>
+        <div style="height: 20px;"></div>
+        <button id="save-adj-list">Save as Adjacency List</button>
+        <button id="save-adj-matrix">Save as Adjacency Matrix</button>
+    </div>
+
+    <div id="main-canvas">
+        <svg></svg>
+    </div>
+
+    <div id="right-sidebar">
+        <h3>Information</h3>
+        <canvas id="degree-distribution"></canvas>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
 
