@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Dynamically Generated Dendrogram with Custom Path Generator</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        .link {
+            fill: none;
+            stroke: #555;
+            stroke-width: 1.5px;
+        }
+
+        .node circle {
+            fill: #999;
+            stroke: steelblue;
+            stroke-width: 1.5px;
+        }
+
+        .node text {
+            font: 10px sans-serif;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <svg width="960" height="800"></svg>
+    <script>
+        // Function to generate a hierarchical data structure
+        function generateData(depth, breadth) {
+            const root = { name: "root", children: [] };
+            let currentLevel = [root];
+            for (let i = 0; i < depth; i++) {
+                const nextLevel = [];
+                currentLevel.forEach(node => {
+                    node.children = [];
+                    for (let j = 0; j < breadth; j++) {
+                        const child = { name: `child_${i}_${j}` };
+                        node.children.push(child);
+                        nextLevel.push(child);
+                    }
+                });
+                currentLevel = nextLevel;
+            }
+            return root;
+        }
+
+        // Generate the data
+        const data = generateData(4, 3); // Depth of 4, breadth of 3
+
+        const width = document.querySelector("svg").getAttribute("width");
+        const height = document.querySelector("svg").getAttribute("height");
+
+        const svg = d3.select("svg"),
+            g = svg.append("g").attr("transform", "translate(40,0)");
+
+        const cluster = d3.cluster().size([height - 40, width - 160]);
+        const root = d3.hierarchy(data);
+
+        cluster(root);
+
+        // Custom path generator for right-angled links
+        function elbow(d) {
+            return "M" + d.source.y + "," + d.source.x
+                 + "H" + (d.source.y + (d.target.y - d.source.y) / 2)
+                 + "V" + d.target.x
+                 + "H" + d.target.y;
+        }
+
+        const links = g.selectAll(".link")
+            .data(root.links())
+            .enter().append("path")
+            .attr("class", "link")
+            .attr("d", elbow);
+
+        const nodes = g.selectAll(".node")
+            .data(root.descendants())
+            .enter().append("g")
+            .attr("class", "node")
+            .attr("transform", function(d) { 
+                return "translate(" + d.y + "," + d.x + ")"; 
+            });
+
+        nodes.append("circle").attr("r", 4.5);
+
+        nodes.append("text")
+            .attr("dy", "0.31em")
+            .attr("x", function(d) { return d.children ? -8 : 8; })
+            .style("text-anchor", function(d) { return d.children ? "end" : "start"; })
+            .text(function(d) { return d.data.name; });
+    </script>
+</body>
+</html>
