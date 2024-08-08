@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Top-Down Asymmetrical Dendrogram</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        .link {
+            fill: none;
+            stroke: #555;
+            stroke-width: 1.5px;
+        }
+
+        .node circle {
+            fill: #999;
+            stroke: steelblue;
+            stroke-width: 1.5px;
+        }
+
+        .node text {
+            font: 10px sans-serif;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <svg width="960" height="800"></svg>
+    <script>
+        // Function to generate a hierarchical data structure with random asymmetry
+        function generateData(maxDepth) {
+            function createNode(level, index) {
+                if (level > maxDepth) return null;
+                const node = { name: `node_${level}_${index}`, children: [] };
+                const numChildren = level === 0 ? 2 : Math.floor(Math.random() * 3); // Root always has 2 children
+                for (let i = 0; i < numChildren; i++) {
+                    const child = createNode(level + 1, i);
+                    if (child) node.children.push(child);
+                }
+                return node;
+            }
+            return createNode(0, 0);
+        }
+
+        // Generate the data with random asymmetry
+        const data = generateData(4); // Maximum depth of 4
+
+        const width = document.querySelector("svg").getAttribute("width");
+        const height = document.querySelector("svg").getAttribute("height");
+
+        const svg = d3.select("svg"),
+            g = svg.append("g").attr("transform", "translate(50,40)"); // Adjusted for padding
+
+        const tree = d3.tree().size([height - 80, width - 100]); // Adjusted dimensions for padding
+        const root = d3.hierarchy(data);
+
+        tree(root);
+
+        // Custom path generator for right-angled links
+        function elbow(d) {
+            return "M" + d.source.x + "," + d.source.y
+                 + "V" + (d.source.y + (d.target.y - d.source.y) / 2)
+                 + "H" + d.target.x
+                 + "V" + d.target.y;
+        }
+
+        const links = g.selectAll(".link")
+            .data(root.links())
+            .enter().append("path")
+            .attr("class", "link")
+            .attr("d", elbow);
+
+        const nodes = g.selectAll(".node")
+            .data(root.descendants())
+            .enter().append("g")
+            .attr("class", "node")
+            .attr("transform", function(d) { 
+                return "translate(" + d.x + "," + d.y + ")"; 
+            });
+
+        nodes.append("circle").attr("r", 4.5);
+
+        nodes.append("text")
+            .attr("dy", "0.31em")
+            .attr("x", function(d) { return d.children ? 8 : -8; })
+            .style("text-anchor", function(d) { return d.children ? "start" : "end"; })
+            .text(function(d) { return d.data.name; });
+    </script>
+</body>
+</html>
