@@ -1,0 +1,101 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>D3 Dendrogram</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        .link {
+            fill: none;
+            stroke: #555;
+            stroke-width: 1.5px;
+        }
+
+        .node circle {
+            fill: #999;
+            stroke: steelblue;
+            stroke-width: 1.5px;
+        }
+
+        .node text {
+            font: 10px sans-serif;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <svg width="960" height="800"></svg>
+    <script>
+        // Sample linkage matrix (generated in Python or manually created)
+        const linkage = [
+            [0, 1, 0.1, 2],
+            [2, 3, 0.2, 2],
+            [4, 5, 0.3, 2],
+            [0, 2, 0.4, 4],
+            [4, 6, 0.5, 4],
+            [0, 4, 0.6, 8],
+        ];
+
+        // Convert linkage matrix to hierarchical data structure
+        function toHierarchy(linkage) {
+            const n = linkage.length + 1;
+            const children = new Array(2 * n - 1);
+            for (let i = 0; i < n; i++) {
+                children[i] = { name: i.toString() };
+            }
+            for (let i = 0; i < linkage.length; i++) {
+                const [a, b, , ] = linkage[i];
+                children[n + i] = { children: [children[a], children[b]] };
+            }
+            return children[children.length - 1];
+        }
+
+        const data = toHierarchy(linkage);
+
+        const width = 960;
+        const height = 800;
+
+        const svg = d3.select("svg")
+            .attr("width", width)
+            .attr("height", height)
+            .append("g")
+            .attr("transform", "translate(40,40)");
+
+        const tree = d3.tree().size([height - 80, width - 160]);
+        const root = d3.hierarchy(data);
+
+        tree(root);
+
+        // Custom path generator for right-angled links
+        function elbow(d) {
+            return "M" + d.source.x + "," + d.source.y
+                 + "V" + (d.source.y + (d.target.y - d.source.y) / 2)
+                 + "H" + d.target.x
+                 + "V" + d.target.y;
+        }
+
+        const links = svg.selectAll(".link")
+            .data(root.links())
+            .enter().append("path")
+            .attr("class", "link")
+            .attr("d", elbow);
+
+        const nodes = svg.selectAll(".node")
+            .data(root.descendants())
+            .enter().append("g")
+            .attr("class", "node")
+            .attr("transform", function(d) { 
+                return "translate(" + d.x + "," + d.y + ")"; 
+            });
+
+        nodes.append("circle").attr("r", 4.5);
+
+        nodes.append("text")
+            .attr("dy", "0.31em")
+            .attr("x", 8)
+            .style("text-anchor", "start")
+            .text(function(d) { return d.data.name; });
+    </script>
+</body>
+</html>
