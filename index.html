@@ -1,11 +1,22 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Galen J. Wilkerson: Insights in Complex Systems and AI</title>
+    <title>Galen J. Wilkerson: Insights in Machine Learning, AI, and Complex Systems Research.</title>
     <style>
         body { font-family: Arial, sans-serif; line-height: 1.6; margin: 0; padding: 0; color: #333; }
         .container { width: 80%; margin: auto; overflow: hidden; }
-        header { background: #008CBA; color: white; padding-top: 30px; min-height: 70px; border-bottom: #030303 3px solid; }
+        header { 
+            background: #008CBA; 
+            color: white; 
+            padding-top: 30px; 
+            min-height: 70px; 
+            border-bottom: #030303 3px solid; 
+            position: fixed; 
+            width: 100%; 
+            top: 0; 
+            left: 0;
+            z-index: 1000;
+        }
         header a { color: #ffffff; text-decoration: none; text-transform: uppercase; font-size: 16px; }
         header ul { padding: 0; margin: 0; list-style: none; overflow: hidden; }
         header li { float: left; display: inline; padding: 0 20px 0 20px; }
@@ -16,11 +27,38 @@
         header a:hover { color: #ffffff; font-weight: bold; }
         .banner { padding: 40px 0 30px 0; background: url('banner-bg.jpg') no-repeat center center; }
         .banner h1 { text-align: center; margin: 0; font-size: 45px; }
-        .main-col { float: left; width: 70%; }
-        .sidebar { float: right; width: 30%; background: #f4f4f4; padding: 20px; box-sizing: border-box; }
+        .main-col { 
+            float: left; 
+            width: 70%; 
+            padding-top: 100px; /* Adjusted for fixed header */ 
+        }
+        .sidebar { 
+            float: right; 
+            width: 30%; 
+            background: #f4f4f4; 
+            padding: 20px; 
+            box-sizing: border-box; 
+            padding-top: 100px; /* Adjusted for fixed header */ 
+        }
         .footer { background: #333333; color: white; text-align: center; padding: 30px 0 30px 0; }
+        .project {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .project img {
+            width: 150px;
+            margin-right: 20px;
+        }
+        .project div {
+            flex: 1;
+        }
+        h2 {
+            clear: both;
+        }
     </style>
 </head>
+
 <body>
     <header>
         <div class="container">
@@ -32,15 +70,17 @@
                     <li class="current"><a href="#about">About</a></li>
                     <li><a href="#projects">Projects</a></li>
                     <li><a href="#publications">Publications</a></li>
+                    <li><a href="https://github.com/galenwilkerson?tab=repositories">Repositories</a></li>
                 </ul>
             </nav>
         </div>
     </header>
 
+
     <section class="container">
         <div class="main-col">
             <h2 id="about">About Galen</h2>
-            <p>Galen J. Wilkerson is a seasoned professional in complex systems and artificial intelligence. His career is marked by deep exploration into these fields and contributions to interdisciplinary knowledge and collaboration.</p>
+            <p>Galen J. Wilkerson is a seasoned professional in artificial intelligence, machine learning, and complex systems. His career is marked by deep exploration into these fields and contributions to interdisciplinary knowledge and collaboration.</p>
 
 
             <img src="https://raw.githubusercontent.com/galenwilkerson/Linear-Threshold-Model/main/zoo/ltm_simulation_N%3D70_k%3D5.gif" width="300" alt="LTM Logic">
@@ -48,31 +88,188 @@
     
 
             
-            <h2 id="projects">Projects</h2>
-            <p>Explore Galen's projects, each demonstrating his expertise and innovation in AI and complex systems:</p>
-            <ul>
-                <li>
-                    <strong>LTM Logic</strong>: A project exploring Linear Threshold Models, demonstrating the dynamics of network cascades and Boolean logic functions in complex systems.
-                </li>
-                <li>
-                    <strong>Logic and Learning in Network Cascades</strong>: This project highlights the impact of shared knowledge and collective intelligence in AI and complex systems.
-                </li>
-                <li>
-                    <strong>Hopfield Networks</strong>: An in-depth analysis of Hopfield Networks, providing theoretical insights, practical implementations, and visualizations.
-                </li>
-                <li>
-                    <strong>Swarm-Induced Graph</strong>: Focusing on the interaction within robotic systems, demonstrating principles of collaboration and communication.
-                </li>
-                <li>
-                    <strong>Logistic Map and Chaos Exploration</strong>: A study into the orderly chaos of complex systems, emphasizing the mathematical beauty in AI.
-                </li>
-                <li>
-                    <strong>Random Boolean Networks</strong>: Investigating the simplicity and complexity of networked systems, akin to collaborative networks.
-                </li>
-                <li>
-                    <strong>Large Language Models</strong>: Exploring the significance of language and communication in AI.
-                </li>
-            </ul>
+	    <h2 id="projects">Project Gallery</h2>
+           
+<style>
+        .project {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .project img {
+            width: 150px;
+            margin-right: 20px;
+        }
+        .project div {
+            flex: 1;
+        }
+        h2 {
+            clear: both;
+        }
+    </style>
+    <h2>Large Language Models and AI Tools</h2>
+      <div class="project">
+        <img src="images/Flash-Attention-Tutorial_modular.png" alt="Flash-Attention-Tutorial">
+        <div>
+            <h2><a href="https://github.com/galenwilkerson/Flash-Attention-Tutorial">Flash-Attention-Tutorial</a></h2>
+            <p>Flash Attention Tutorial Welcome to the Flash Attention Tutorial repository! This repository provides an in-depth tutorial on the concept of Flash Attention, including high-level intuition, detailed explanation, and practical implementation. Repository Overview Notebook: Flash Attention.ipynb This Jupyter Notebook contains all the tutorial content, including explanations and code implementations. Contents Introduction...</p>
+        </div>
+    </div>
+    
+    <div class="project">
+        <img src="images/cat_herder.png" alt="CatHerder-reflective-LLM-code-creator-and-debugger">
+        <div>
+            <h2><a href="https://github.com/galenwilkerson/CatHerder-reflective-LLM-code-creator-and-debugger">CatHerder-reflective-LLM-code-creator-and-debugger</a></h2>
+            <p>Simple Code Creator & Debugger using LLM Reflection</p>
+        </div>
+    </div>
+     <div class="project">
+        <img src="images/Socratic-Learn-Anything_socratic.png" alt="Socratic-Learn-Anything">
+        <div>
+            <h2><a href="https://github.com/galenwilkerson/Socratic-Learn-Anything">Socratic-Learn-Anything</a></h2>
+            <p>This is a program that uses LLM reflection to interact with chatGPT, creating a Socratic dialog about any topic, gradually building up from basic intuitions.</p>
+        </div>
+    </div>
+    <div class="project">
+        <img src="images/LoRA-Low-Rank-Adaptation_LoRA.png" alt="LoRA-Low-Rank-Adaptation">
+        <div>
+            <h2><a href="https://github.com/galenwilkerson/LoRA-Low-Rank-Adaptation">LoRA-Low-Rank-Adaptation</a></h2>
+            <p>A quick tutorial on LoRA - Low Rank Adaptation for efficient fine tuning of transformers.</p>
+        </div>
+    </div>
+    <div class="project">
+        <img src="images/Transformers-on-Genome-Sequences_dnabert_umap.png" alt="Transformers-on-Genome-Sequences">
+        <div>
+            <h2><a href="https://github.com/galenwilkerson/Transformers-on-Genome-Sequences">Transformers-on-Genome-Sequences</a></h2>
+            <p>Transformers on Genome Sequences This repository demonstrates the use of transformers, including pre-trained BERT and DNABERT, to analyze and visualize genome sequences. The project downloads mitochondrial DNA sequences from various organisms, preprocesses them, and uses these transformer models to generate embeddings. These embeddings are then visualized using UMAP and clustered...</p>
+        </div>
+    </div>
+    
+  
+    
+    <div class="project">
+        <img src="images/VIsualizing-Attention-Matrices_attention_matrix.png" alt="VIsualizing-Attention-Matrices">
+        <div>
+            <h2><a href="https://github.com/galenwilkerson/VIsualizing-Attention-Matrices">VIsualizing-Attention-Matrices</a></h2>
+            <p>Visualizing Attention Matrices The attention matrix is like an adjacency matrix that tells you how much each token should attend to the other tokens for contextual meaning.. So, think of it as a graph where each word has connections of various strengths to other words. This histogram shows the distribution...</p>
+        </div>
+    </div>
+<div class="project">
+        <img src="images/Radial-Visualization-of-Semantic-Embeddings_radial_animation.gif" alt="Radial-Visualization-of-Semantic-Embeddings">
+        <div>
+            <h2><a href="https://github.com/galenwilkerson/Radial-Visualization-of-Semantic-Embeddings">Radial-Visualization-of-Semantic-Embeddings</a></h2>
+            <p>Radial Visualization of Semantic Embeddings This repository contains a Jupyter notebook that demonstrates the radial visualization of semantic word embeddings. The visualization is animated to show how word embeddings of a given sentence change over time. Overview This project uses pre-trained GloVe embeddings to create a radial animation of word...</p>
+        </div>
+        
+    </div>
+    <div class="project">
+        <img src="images/Logistic-Regression_logistic_regression.png" alt="Logistic-Regression">
+        <div>
+            <h2><a href="https://github.com/galenwilkerson/Logistic-Regression">Logistic-Regression</a></h2>
+            <p>simple tutorial on logistic regression</p>
+        </div>
+    </div>
+    <h2>Complex Systems and Network Theory</h2>
+    <div class="project">
+        <img src="images/global_cascades_Simulation.png" alt="global_cascades">
+        <div>
+            <h2><a href="https://github.com/galenwilkerson/global_cascades">global_cascades</a></h2>
+            <p>Global Cascades Simulation This repository hosts the code for a "Global Cascades Simulation" based on Watts' influential paper, "A simple model of global cascades". The simulation visualizes the frequency of cascades across different network densities and provides insights into how small initial shocks can lead to widespread effects in a...</p>
+        </div>
+    </div>
+    <div class="project">
+        <img src="images/Linear-Threshold-Model_cascade_.png" alt="Linear-Threshold-Model">
+        <div>
+            <h2><a href="https://github.com/galenwilkerson/Linear-Threshold-Model">Linear-Threshold-Model</a></h2>
+            <p>Linear Threshold Model simulation. First and Second: Creating a network then activating seed nodes as the inputs, then running cascades yields patterns of activation corresponding to Boolean logic functions at network nodes. Third: The functions computed in this LTM. Third: Cascade sizes correspond to percolation - formation of the Giant...</p>
+        </div>
+    </div>
+    <div class="project">
+        <img src="images/linear-threshold-model-on-network-topologies_net_image.png" alt="linear-threshold-model-on-network-topologies">
+        <div>
+            <h2><a href="https://github.com/galenwilkerson/linear-threshold-model-on-network-topologies">linear-threshold-model-on-network-topologies</a></h2>
+            <p>Linear Threshold Model on Network Topologies This repository contains an implementation of the Linear Threshold Model (LTM) on various network topologies using D3.js for visualization. The available network topologies include random, small-world, and preferential attachment. You can adjust parameters such as the number of nodes, minimum and maximum thresholds, mean...</p>
+        </div>
+    </div>
+    <div class="project">
+        <img src="images/robot-swarm---guided-self-organized-criticality_swarm.jpg" alt="robot-swarm---guided-self-organized-criticality">
+        <div>
+            <h2><a href="https://github.com/galenwilkerson/robot-swarm---guided-self-organized-criticality">robot-swarm---guided-self-organized-criticality</a></h2>
+            <p>Robot Swarm Simulation for Oil Spill Cleanup This repository contains the code for a robot swarm simulation that uses percolation and blocking mechanisms of network cascades to control robot swarming. The primary goal is to efficiently clean up oil spills through a guided self-organized criticality approach. This simulation showcases how...</p>
+        </div>
+    </div>
+    <div class="project">
+        <img src="images/robustness-in-large-scale-systems_powerlaw_fit.png" alt="robustness-in-large-scale-systems">
+        <div>
+            <h2><a href="https://github.com/galenwilkerson/robustness-in-large-scale-systems">robustness-in-large-scale-systems</a></h2>
+            <p>Robustness in Large-Scale Systems This repository explores the robustness of large-scale systems through the lens of network theory, focusing on the properties of scale-free networks. The key metric investigated is the scaling exponent, a measure of the degree distribution's power-law behavior in such networks. Overview Large-scale systems often exhibit scale-free...</p>
+        </div>
+    </div>
+    <div class="project">
+        <img src="images/social-influence-game_1720714876080.jpeg" alt="social-influence-game">
+        <div>
+            <h2><a href="https://github.com/galenwilkerson/social-influence-game">social-influence-game</a></h2>
+            <p>The game of social influence - add or remove links to maximize your income.</p>
+        </div>
+    </div>
+    <div class="project">
+        <img src="images/ltm_simulation_N=70_k=5.gif" alt="LTM-logic-interactive">
+        <div>
+            <h2><a href="https://github.com/galenwilkerson/LTM-logic-interactive">LTM-logic-interactive</a></h2>
+            <p>LTM Simulation Run the Simulation This repository contains an interactive simulation of the Linear Threshold Model (LTM), which demonstrates the logic functions computed by the model. The LTM represents one of the simplest models of the emergence of information processing in systems and is considered universal due to its connection...</p>
+        </div>
+    </div>
+    <div class="project">
+        <img src="images/swarm-induced-graph_robot_swarm.png" alt="swarm-induced-graph">
+        <div>
+            <h2><a href="https://github.com/galenwilkerson/swarm-induced-graph">swarm-induced-graph</a></h2>
+            <p>Using 'robot' positions at each timestep, compute pair-wise distances. Robots within a threshold distance of one another can communicate.</p>
+        </div>
+    </div>
+    
+
+    <h2>Mathematical and Statistical Models</h2>
+    <div class="project">
+        <img src="images/Benfords-Law_benford.png" alt="Benfords-Law">
+        <div>
+            <h2><a href="https://github.com/galenwilkerson/Benfords-Law">Benfords-Law</a></h2>
+            <p>A tutorial on how Benford's Law emerges out of multiplicative processes.</p>
+        </div>
+    </div>
+    <div class="project">
+        <img src="images/Birthday-Paradox-n-other-problems_birthday_graph.png" alt="Birthday-Paradox-n-other-problems">
+        <div>
+            <h2><a href="https://github.com/galenwilkerson/Birthday-Paradox-n-other-problems">Birthday-Paradox-n-other-problems</a></h2>
+            <p>Birthday Paradox and other Combinatorial and Probability Problems This repository contains a Jupyter Notebook that explores and visualizes the Birthday Paradox and other Combinatorial Problems. The Birthday Paradox is a famous problem in probability theory that demonstrates how our intuition about probabilities can be misleading. It states that in a...</p>
+        </div>
+    </div>
+    <div class="project">
+        <img src="images/Monty-Hall-Problem_monty_hall.png" alt="Monty-Hall-Problem">
+        <div>
+            <h2><a href="https://github.com/galenwilkerson/Monty-Hall-Problem">Monty-Hall-Problem</a></h2>
+            <p>Monty Hall Problem This repository contains a Jupyter Notebook that demonstrates and simulates the Monty Hall Problem, a famous probability puzzle based on a game show scenario. Introduction The Monty Hall problem is a probability puzzle named after the host of the television game show "Let's Make a Deal." The...</p>
+        </div>
+    </div>
+    
+    
+
+    <h2>Miscellaneous Projects</h2>
+ 
+
+    <div class="project">
+        <img src="images/micro-canonical-model_microcanonical.png" alt="micro-canonical-model">
+        <div>
+            <h2><a href="https://github.com/galenwilkerson/micro-canonical-model">micro-canonical-model</a></h2>
+            <p>A simple web implementation of a single instance of the micro-canonical model.</p>
+        </div>
+    </div>
+    <div class="project">
+        <img src="images/wtmm.png" alt="wavelet-transform-modulus-maxima-WTMM-tutorial">
+        <div>
+            <h2><a href="https://github.com/galenwilkerson/wavelet-transform-modulus-maxima-WTMM-tutorial">wavelet-transform-modulus-maxima-WTMM-tutorial</a></h2>
+            <p>Wavelet Transform Modulus Maxima (WTMM) Tutorial Figure 1: Wavelet Transform Modulus Maxima (WTMM) applied to a sample signal. The figure shows the original signal, its wavelet transform, and the corresponding modulus maxima ("skeleton") which highlights the singularities in the signal. Introduction The Wavelet Transform Modulus Maxima (WTMM) method is a...</p>
+        </div>
+    </div>
 
             <h2 id="publications">Publications</h2>
             <p>Galen's publications reflect his extensive research and expertise:</p>
@@ -102,3 +299,4 @@
     </footer>
 </body>
 </html>
+
