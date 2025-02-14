@@ -19,7 +19,7 @@
   </style>
 </head>
 <body>
-  <h2>Network with Frozen Endpoints</h2>
+  <h2>Network with Frozen Endpoints (Color All Phases)</h2>
   <div id="controls">
     <label for="numNodes">Number of Nodes (>= 2):</label>
     <input type="number" id="numNodes" value="10" min="2" max="200" />
@@ -34,13 +34,10 @@
   <script>
     /**
      * We have N total nodes:
-     *   - Node 0 = A (left side), with fixed phase = 0
-     *   - Node N-1 = B (right side), with fixed phase = π (for example)
-     *   - Other nodes (1..N-2) can update their phases by a Kuramoto-like rule.
-     *
-     * All nodes are placed using a force-directed layout, except we pin A and B on
-     * the left and right edges of the canvas. The adjacency matrix is random with
-     * probability p for edges. We skip updating the phases of A and B.
+     *   - Node 0 (A) on the left, phase fixed at 0
+     *   - Node N-1 (B) on the right, phase fixed at π
+     *   - Others (1..N-2) update via a Kuramoto-like rule.
+     * A and B's phases never change, but are still drawn in color to show their difference.
      */
 
     let numberOfNodes;
@@ -70,18 +67,14 @@
 
     /**
      * createAdjacencyMatrix(n, p)
-     * Returns an n x n matrix with edges present (1) with probability p. No self-loops.
+     * Returns an n x n matrix with edges present (1) at probability p. No self-loops.
      */
     function createAdjacencyMatrix(n, p) {
       const matrix = [];
       for (let i = 0; i < n; i++) {
         matrix[i] = [];
         for (let j = 0; j < n; j++) {
-          if (i === j) {
-            matrix[i][j] = 0;
-          } else {
-            matrix[i][j] = Math.random() < p ? 1 : 0;
-          }
+          matrix[i][j] = (i !== j && Math.random() < p) ? 1 : 0;
         }
       }
       return matrix;
@@ -105,37 +98,33 @@
 
     /**
      * runSpringLayout()
-     * Force-directed layout for nodes [0..N-1],
-     * but we pin node 0 (A) on the far left, node N-1 (B) on the far right.
+     * Force-directed layout, but A (node 0) is pinned on the left,
+     * B (node n-1) pinned on the right. Others can move freely.
      */
     function runSpringLayout() {
-      positions = [];
-      velocities = [];
-
-      // Canvas bounds
       const w = canvas.width;
       const h = canvas.height;
 
+      positions = [];
+      velocities = [];
+
       for (let i = 0; i < numberOfNodes; i++) {
-        // If it's node 0 (A), place near left
         if (i === 0) {
+          // Pin A on left
           positions[i] = { x: nodeRadius + 10, y: h / 2 };
-        }
-        // If it's node N-1 (B), place near right
-        else if (i === numberOfNodes - 1) {
+        } else if (i === numberOfNodes - 1) {
+          // Pin B on right
           positions[i] = { x: w - nodeRadius - 10, y: h / 2 };
-        }
-        // Otherwise place randomly
-        else {
+        } else {
+          // Middle nodes random start
           positions[i] = {
             x: 50 + Math.random() * (w - 100),
-            y: 50 + Math.random() * (h - 100),
+            y: 50 + Math.random() * (h - 100)
           };
         }
         velocities[i] = { x: 0, y: 0 };
       }
 
-      // We run layout iterations, but keep node 0 and N-1 pinned
       for (let iter = 0; iter < layoutIterations; iter++) {
         const forces = [];
         for (let i = 0; i < numberOfNodes; i++) {
@@ -181,10 +170,9 @@
           }
         }
 
-        // Update velocities & positions, but pin node 0 & node N-1
+        // Update velocities & positions, skipping pinned endpoints
         for (let i = 0; i < numberOfNodes; i++) {
-          // skip pinned nodes
-          if (i === 0 || i === numberOfNodes - 1) continue;
+          if (i === 0 || i === numberOfNodes - 1) continue; // pinned
 
           velocities[i].x = (velocities[i].x + forces[i].x) * damping;
           velocities[i].y = (velocities[i].y + forces[i].y) * damping;
@@ -192,24 +180,24 @@
           positions[i].x += velocities[i].x;
           positions[i].y += velocities[i].y;
 
-          // clamp to canvas
-          positions[i].x = Math.max(nodeRadius, Math.min(canvas.width - nodeRadius, positions[i].x));
-          positions[i].y = Math.max(nodeRadius, Math.min(canvas.height - nodeRadius, positions[i].y));
+          // clamp
+          positions[i].x = Math.max(nodeRadius, Math.min(w - nodeRadius, positions[i].x));
+          positions[i].y = Math.max(nodeRadius, Math.min(h - nodeRadius, positions[i].y));
         }
       }
     }
 
     /**
      * updatePhases()
-     * Discrete Kuramoto-like rule, except we skip node 0 and node N-1 (frozen).
-     *   θ_i <- θ_i + dt * coupling * Σ_j A_ij sin(θ_j - θ_i)
+     * Kuramoto update for nodes 1..N-2 only (A=0 and B=N-1 are frozen).
      */
     function updatePhases() {
       const newPhases = [...phases];
       for (let i = 0; i < numberOfNodes; i++) {
-        // skip the frozen endpoints
-        if (i === 0 || i === numberOfNodes - 1) continue;
-
+        if (i === 0 || i === numberOfNodes - 1) {
+          // skip frozen endpoints
+          continue;
+        }
         let sumCoupling = 0;
         for (let j = 0; j < numberOfNodes; j++) {
           if (adjacencyMatrix[i][j] === 1) {
@@ -223,14 +211,13 @@
 
     /**
      * drawNetwork()
-     * - Edges
-     * - Nodes colored by phase
-     *   (Node 0 = A in black? Node N-1 = B in black? or keep color by phase?)
+     * - Edges in light lines
+     * - Nodes colored by phase, including A & B
      */
     function drawNetwork() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // Edges
+      // Draw edges
       ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)';
       for (let i = 0; i < numberOfNodes; i++) {
         for (let j = i + 1; j < numberOfNodes; j++) {
@@ -243,28 +230,21 @@
         }
       }
 
-      // Nodes
+      // Draw nodes
       for (let i = 0; i < numberOfNodes; i++) {
-        if (i === 0) {
-          // Node A: pinned
-          ctx.fillStyle = '#000'; // black
-        } else if (i === numberOfNodes - 1) {
-          // Node B: pinned
-          ctx.fillStyle = '#000'; // black
-        } else {
-          // color by phase
-          const hue = ((phases[i] * 180) / Math.PI) % 360;
-          ctx.fillStyle = `hsl(${hue}, 100%, 50%)`;
-        }
+        // Color by phase
+        const hue = ((phases[i] * 180) / Math.PI) % 360;
+        ctx.fillStyle = `hsl(${hue}, 100%, 50%)`;
+        
         ctx.beginPath();
-        ctx.arc(positions[i].x, positions[i].y, nodeRadius, 0, 2*Math.PI);
+        ctx.arc(positions[i].x, positions[i].y, nodeRadius, 0, 2 * Math.PI);
         ctx.fill();
       }
     }
 
     /**
      * step()
-     * update phases (except for A/B) and then draw
+     * Update phases (except A/B), redraw
      */
     function step() {
       updatePhases();
@@ -273,11 +253,10 @@
 
     /**
      * initializeNetwork()
-     * 1) read number of nodes
-     * 2) create adjacency matrix
-     * 3) run spring layout with pinned endpoints
-     * 4) initialize phases (A=0, B=π, others random)
-     * 5) start simulation
+     * - Build adjacency
+     * - Run layout with pinned endpoints
+     * - Set phases (A=0, B=π)
+     * - Start simulation
      */
     function initializeNetwork() {
       if (simInterval) clearInterval(simInterval);
@@ -285,24 +264,23 @@
       numberOfNodes = parseInt(numNodesInput.value, 10);
       connectionProbability = parseFloat(probInput.value);
 
-      // Must have at least 2 to define A & B
       if (numberOfNodes < 2) {
         alert("Number of Nodes must be >= 2");
         return;
       }
 
       adjacencyMatrix = createAdjacencyMatrix(numberOfNodes, connectionProbability);
-      runSpringLayout();
-
       phases = initializePhases(numberOfNodes);
 
+      runSpringLayout();
       drawNetwork();
+
       simInterval = setInterval(step, updateIntervalMs);
     }
 
     initBtn.addEventListener('click', initializeNetwork);
 
-    // Start once on load
+    // Initialize once on load
     initializeNetwork();
   </script>
 </body>
