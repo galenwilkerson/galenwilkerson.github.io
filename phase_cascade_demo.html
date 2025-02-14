@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8"/>
+  <title>Phase Cascade Demo</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      margin: 20px;
+    }
+    #controls {
+      margin-bottom: 10px;
+    }
+    #myCanvas {
+      border: 1px solid #aaa;
+      display: block;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+<h2>Phase Cascade Demo</h2>
+<div id="controls">
+  <label for="numOsc">Number of Oscillators:</label>
+  <input type="number" id="numOsc" value="10" min="2" max="200" />
+  
+  <label for="prob">Connection Probability p:</label>
+  <input type="number" id="prob" value="0.2" step="0.01" min="0" max="1" />
+  
+  <button id="initBtn">Initialize</button>
+</div>
+<canvas id="myCanvas" width="600" height="600"></canvas>
+
+<script>
+/**
+ * Create and visualize a network of oscillators that synchronize.
+ * Click on an oscillator to change its phase and see how that difference propagates.
+ */
+
+let adjacencyMatrix = [];
+let phases = [];
+let coords = [];   // store each oscillator's (x, y) for click detection
+let simInterval = null;
+let numberOfOsc;
+let connectionProbability;
+
+// Canvas and input elements
+const canvas = document.getElementById('myCanvas');
+const ctx = canvas.getContext('2d');
+const numOscInput = document.getElementById('numOsc');
+const probInput = document.getElementById('prob');
+const initBtn = document.getElementById('initBtn');
+
+// Simulation parameters
+const dt = 0.05;         // discrete time-step
+const coupling = 1;      // coupling strength
+const updateIntervalMs = 50;  // ~20 FPS
+const nodeRadius = 12;   // radius for drawing each oscillator
+
+/**
+ * createAdjacencyMatrix(numOsc, prob)
+ * Return a numOsc x numOsc adjacency matrix with edges present with probability prob.
+ * No self-loops.
+ */
+function createAdjacencyMatrix(numOsc, prob) {
+  const matrix = [];
+  for (let i = 0; i < numOsc; i++) {
+    matrix[i] = [];
+    for (let j = 0; j < numOsc; j++) {
+      if (i === j) {
+        matrix[i][j] = 0;
+      } else {
+        matrix[i][j] = Math.random() < prob ? 1 : 0;
+      }
+    }
+  }
+  return matrix;
+}
+
+/**
+ * initPhases(numOsc)
+ * Return an array of random phases in [0, 2π).
+ */
+function initPhases(numOsc) {
+  const p = [];
+  for (let i = 0; i < numOsc; i++) {
+    p[i] = 2 * Math.PI * Math.random();
+  }
+  return p;
+}
+
+/**
+ * updatePhases()
+ * Discrete Kuramoto-like update:
+ *   θ_i(t+1) = θ_i(t) + dt * K * Σ A_ij * sin(θ_j - θ_i)
+ */
+function updatePhases() {
+  const newPhases = [];
+  for (let i = 0; i < numberOfOsc; i++) {
+    let sumCoupling = 0;
+    for (let j = 0; j < numberOfOsc; j++) {
+      if (adjacencyMatrix[i][j] === 1) {
+        sumCoupling += Math.sin(phases[j] - phases[i]);
+      }
+    }
+    newPhases[i] = phases[i] + dt * coupling * sumCoupling;
+  }
+  phases = newPhases;
+}
+
+/**
+ * drawNetwork()
+ * Draw the oscillators arranged on a circle, with edges for adjacency.
+ * Each oscillator is colored by its phase (for clarity).
+ */
+function drawNetwork() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Draw edges
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.1)';
+  for (let i = 0; i < numberOfOsc; i++) {
+    for (let j = i + 1; j < numberOfOsc; j++) {
+      if (adjacencyMatrix[i][j] === 1) {
+        ctx.beginPath();
+        ctx.moveTo(coords[i].x, coords[i].y);
+        ctx.lineTo(coords[j].x, coords[j].y);
+        ctx.stroke();
+      }
+    }
+  }
+
+  // Draw nodes
+  for (let i = 0; i < numberOfOsc; i++) {
+    // Map phase to a hue on HSL color wheel
+    const hue = ((phases[i] * 180) / Math.PI) % 360;
+    ctx.fillStyle = `hsl(${hue}, 100%, 50%)`;
+
+    ctx.beginPath();
+    ctx.arc(coords[i].x, coords[i].y, nodeRadius, 0, 2 * Math.PI);
+    ctx.fill();
+  }
+}
+
+/**
+ * step()
+ * Perform one simulation step: update phases, then redraw.
+ */
+function step() {
+  updatePhases();
+  drawNetwork();
+}
+
+/**
+ * initializeNetwork()
+ * Create a new network, random phases, draw it, then start simulation.
+ */
+function initializeNetwork() {
+  if (simInterval) clearInterval(simInterval);
+
+  numberOfOsc = parseInt(numOscInput.value, 10);
+  connectionProbability = parseFloat(probInput.value);
+
+  adjacencyMatrix = createAdjacencyMatrix(numberOfOsc, connectionProbability);
+  phases = initPhases(numberOfOsc);
+  
+  // Precompute node coords on a circle
+  coords = [];
+  const centerX = canvas.width / 2;
+  const centerY = canvas.height / 2;
+  const radius = canvas.width / 3;
+  for (let i = 0; i < numberOfOsc; i++) {
+    const angle = (2 * Math.PI * i) / numberOfOsc;
+    coords.push({
+      x: centerX + radius * Math.cos(angle),
+      y: centerY + radius * Math.sin(angle)
+    });
+  }
+
+  drawNetwork();
+  simInterval = setInterval(step, updateIntervalMs);
+}
+
+/**
+ * onCanvasClick(event)
+ * Find which oscillator (if any) is clicked. If found, kick its phase (set randomly).
+ */
+function onCanvasClick(event) {
+  // Get mouse coords relative to canvas
+  const rect = canvas.getBoundingClientRect();
+  const mouseX = event.clientX - rect.left;
+  const mouseY = event.clientY - rect.top;
+
+  // Check each node to see if click is inside it
+  for (let i = 0; i < numberOfOsc; i++) {
+    const dx = mouseX - coords[i].x;
+    const dy = mouseY - coords[i].y;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    if (dist <= nodeRadius) {
+      // Kick this node's phase to a random new value
+      phases[i] = 2 * Math.PI * Math.random();
+      drawNetwork();
+      break;
+    }
+  }
+}
+
+// Attach event listeners
+initBtn.addEventListener('click', initializeNetwork);
+canvas.addEventListener('click', onCanvasClick);
+
+// Initialize once on load
+initializeNetwork();
+</script>
+</body>
+</html>
