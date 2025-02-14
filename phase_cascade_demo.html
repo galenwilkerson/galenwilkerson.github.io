@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="UTF-8"/>
-  <title>Spring Layout Cascade</title>
+  <title>Spring Layout Cascade (All Start Synchronized)</title>
   <style>
     body {
       font-family: sans-serif;
@@ -19,7 +19,7 @@
   </style>
 </head>
 <body>
-<h2>Spring Layout Network (Cascade Demo)</h2>
+<h2>Spring Layout Network (All Start in Sync)</h2>
 <div id="controls">
   <label for="numOsc">Number of Nodes:</label>
   <input type="number" id="numOsc" value="30" min="2" max="500" />
@@ -33,65 +33,83 @@
 
 <script>
 /**
- * Spring Layout + "Phase Cascade" Demo
- *
- * 1) We create an adjacency matrix with probability p.
- * 2) We run a simple force-directed (spring) layout so nodes are placed on-screen.
- * 3) All oscillators start in the same phase (fully synchronized).
- * 4) We run a discrete Kuramoto-like update rule over time.
- * 5) Clicking on any node sets its phase to a random value, causing a cascade of phase differences.
+ * Spring Layout + Cascade Demo
+ * - All nodes start with phase = 0 (fully synchronized).
+ * - Clicking any node randomly "kicks" its phase, creating a cascade of updates.
+ * - Nodes are laid out via a simple force-directed (spring) algorithm, clamped to fit in canvas.
+ * - The network synchronizes with a discrete Kuramoto-like rule.
  */
 
 let adjacencyMatrix = [];
-let phases = [];
-let positions = [];
-let velocities = [];
+let phases = [];       // phases of each node
+let positions = [];    // node positions from the spring layout
+let velocities = [];   // layout velocities
 let simInterval = null;
 let numberOfOsc;
 let connectionProbability;
 
+// HTML elements
 const canvas = document.getElementById('myCanvas');
 const ctx = canvas.getContext('2d');
 const numOscInput = document.getElementById('numOsc');
 const probInput = document.getElementById('prob');
 const initBtn = document.getElementById('initBtn');
 
-// Kuramoto simulation parameters
-const dt = 0.03;            // discrete time-step
-const coupling = 1;         // coupling strength
+// Kuramoto parameters
+const dt = 0.03;          // time-step
+const coupling = 1;       // coupling strength
 const updateIntervalMs = 50;  // ~20 FPS
-const nodeRadius = 10;      // node draw radius
+const nodeRadius = 10;    // node radius for drawing
 
 // Spring layout parameters
-const layoutIterations = 500;   // # of iterations for force-directed layout
-const kRepel = 5000;           // repulsive constant
-const kAttract = 0.1;          // attractive constant for edges
-const damping = 0.85;          // velocity damping factor
+const layoutIterations = 500;
+const kRepel = 5000;    // repulsive constant
+const kAttract = 0.1;   // attractive constant for edges
+const damping = 0.85;   // velocity damping
 
 /**
- * createAdjacencyMatrix(numOsc, prob)
- * Return a numOsc x numOsc adjacency matrix with edges present with probability prob.
+ * createAdjacencyMatrix(n, p)
+ * Returns an n x n adjacency matrix with edges added at probability p.
+ * No self-loops.
  */
-function createAdjacencyMatrix(numOsc, prob) {
+function createAdjacencyMatrix(n, p) {
   const matrix = [];
-  for (let i = 0; i < numOsc; i++) {
+  for (let i = 0; i < n; i++) {
     matrix[i] = [];
-    for (let j = 0; j < numOsc; j++) {
-      matrix[i][j] = (i !== j && Math.random() < prob) ? 1 : 0;
+    for (let j = 0; j < n; j++) {
+      if (i === j) {
+        matrix[i][j] = 0;
+      } else {
+        matrix[i][j] = Math.random() < p ? 1 : 0;
+      }
     }
   }
   return matrix;
 }
 
 /**
+ * initPhasesSynchronized(n)
+ * Returns an array of length n, all phases = 0 (fully synchronized).
+ */
+function initPhasesSynchronized(n) {
+  const arr = [];
+  for (let i = 0; i < n; i++) {
+    arr.push(0);
+  }
+  return arr;
+}
+
+/**
  * runSpringLayout()
- * A simple force-directed layout:
- *  - Every pair of nodes repels each other
- *  - Edges provide an attractive (spring) force
- *  - After layoutIterations, positions[] stores final node coords
+ * Simple force-directed layout to position nodes on the canvas.
+ * Each iteration:
+ *  - Repel all pairs
+ *  - Attract connected pairs
+ *  - Update positions with damping
+ *  - Clamp positions to stay within the canvas
  */
 function runSpringLayout() {
-  // Random initial positions/velocities
+  // Random initial positions
   positions = [];
   velocities = [];
   for (let i = 0; i < numberOfOsc; i++) {
@@ -103,24 +121,21 @@ function runSpringLayout() {
   }
 
   for (let iter = 0; iter < layoutIterations; iter++) {
-    // Compute net forces
     const forces = [];
     for (let i = 0; i < numberOfOsc; i++) {
       forces[i] = { x: 0, y: 0 };
     }
 
-    // Repulsion between all pairs
+    // Repulsion among all pairs
     for (let i = 0; i < numberOfOsc; i++) {
       for (let j = i + 1; j < numberOfOsc; j++) {
         const dx = positions[j].x - positions[i].x;
         const dy = positions[j].y - positions[i].y;
-        const distSq = dx * dx + dy * dy || 0.0001;
+        const distSq = dx*dx + dy*dy || 0.0001; // avoid div by zero
         const dist = Math.sqrt(distSq);
 
         // Repulsive force ~ kRepel / dist^2
         const repForce = kRepel / distSq;
-
-        // Normal direction
         const fx = repForce * (dx / dist);
         const fy = repForce * (dy / dist);
 
@@ -131,18 +146,16 @@ function runSpringLayout() {
       }
     }
 
-    // Attraction along edges
+    // Attraction for each edge
     for (let i = 0; i < numberOfOsc; i++) {
       for (let j = i + 1; j < numberOfOsc; j++) {
         if (adjacencyMatrix[i][j] === 1) {
           const dx = positions[j].x - positions[i].x;
           const dy = positions[j].y - positions[i].y;
-          const dist = Math.sqrt(dx * dx + dy * dy) || 0.0001;
+          const dist = Math.sqrt(dx*dx + dy*dy) || 0.0001;
 
           // Attractive force ~ kAttract * dist
           const attForce = kAttract * dist;
-
-          // Normal direction
           const fx = attForce * (dx / dist);
           const fy = attForce * (dy / dist);
 
@@ -154,7 +167,7 @@ function runSpringLayout() {
       }
     }
 
-    // Update velocities & positions
+    // Update velocities, positions
     for (let i = 0; i < numberOfOsc; i++) {
       velocities[i].x = (velocities[i].x + forces[i].x) * damping;
       velocities[i].y = (velocities[i].y + forces[i].y) * damping;
@@ -162,7 +175,7 @@ function runSpringLayout() {
       positions[i].x += velocities[i].x;
       positions[i].y += velocities[i].y;
 
-      // Keep nodes within canvas bounds
+      // Clamp to canvas
       positions[i].x = Math.max(nodeRadius, Math.min(canvas.width - nodeRadius, positions[i].x));
       positions[i].y = Math.max(nodeRadius, Math.min(canvas.height - nodeRadius, positions[i].y));
     }
@@ -170,21 +183,9 @@ function runSpringLayout() {
 }
 
 /**
- * initPhasesSynchronized(numOsc)
- * Return an array of phases all set to 0, meaning fully synchronized.
- */
-function initPhasesSynchronized(numOsc) {
-  const p = [];
-  for (let i = 0; i < numOsc; i++) {
-    p[i] = 0; // all start in sync
-  }
-  return p;
-}
-
-/**
  * updatePhases()
- * Discrete Kuramoto-like update:
- *   θ_i(t+1) = θ_i(t) + dt * K * Σ A_ij * sin(θ_j - θ_i)
+ * Discrete Kuramoto-like update for each oscillator:
+ *   θ_i(t+1) = θ_i(t) + dt * coupling * Σ_j A_ij * sin(θ_j - θ_i)
  */
 function updatePhases() {
   const newPhases = [];
@@ -202,13 +203,13 @@ function updatePhases() {
 
 /**
  * drawNetwork()
- * Draw the network at the layout positions, color nodes by phase.
+ * Draw edges, then draw nodes colored by their current phase.
  */
 function drawNetwork() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // Draw edges
-  ctx.strokeStyle = 'rgba(0,0,0,0.1)';
+  // Edges
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.1)';
   for (let i = 0; i < numberOfOsc; i++) {
     for (let j = i + 1; j < numberOfOsc; j++) {
       if (adjacencyMatrix[i][j] === 1) {
@@ -220,11 +221,12 @@ function drawNetwork() {
     }
   }
 
-  // Draw nodes
+  // Nodes
   for (let i = 0; i < numberOfOsc; i++) {
-    // Color by phase
+    // Convert phase to hue
     const hue = ((phases[i] * 180) / Math.PI) % 360;
     ctx.fillStyle = `hsl(${hue}, 100%, 50%)`;
+
     ctx.beginPath();
     ctx.arc(positions[i].x, positions[i].y, nodeRadius, 0, 2 * Math.PI);
     ctx.fill();
@@ -233,7 +235,7 @@ function drawNetwork() {
 
 /**
  * step()
- * Perform one simulation step: update phases, then redraw.
+ * Update phases, then redraw.
  */
 function step() {
   updatePhases();
@@ -243,9 +245,9 @@ function step() {
 /**
  * initializeNetwork()
  * 1) Create adjacency matrix
- * 2) Run spring layout to position nodes
- * 3) Set phases all to 0 (synchronized)
- * 4) Begin update loop
+ * 2) Run spring layout
+ * 3) Set all phases to 0 (in sync)
+ * 4) Start the simulation
  */
 function initializeNetwork() {
   if (simInterval) clearInterval(simInterval);
@@ -254,8 +256,8 @@ function initializeNetwork() {
   connectionProbability = parseFloat(probInput.value);
 
   adjacencyMatrix = createAdjacencyMatrix(numberOfOsc, connectionProbability);
-  runSpringLayout(); // get stable positions
-  phases = initPhasesSynchronized(numberOfOsc);
+  runSpringLayout();
+  phases = initPhasesSynchronized(numberOfOsc); // all start at 0
 
   drawNetwork();
   simInterval = setInterval(step, updateIntervalMs);
@@ -263,33 +265,33 @@ function initializeNetwork() {
 
 /**
  * onCanvasClick(event)
- * If user clicks a node, we set its phase to a random value in [0, 2π).
+ * If click is on a node, randomly "kick" its phase in [0, 2π).
  */
 function onCanvasClick(event) {
   const rect = canvas.getBoundingClientRect();
   const mouseX = event.clientX - rect.left;
   const mouseY = event.clientY - rect.top;
 
-  // Check each node to see if click is inside it
   for (let i = 0; i < numberOfOsc; i++) {
     const dx = mouseX - positions[i].x;
     const dy = mouseY - positions[i].y;
     const dist = Math.sqrt(dx*dx + dy*dy);
+
     if (dist <= nodeRadius) {
-      // Kick this node's phase
+      // Significantly change the phase
       phases[i] = 2 * Math.PI * Math.random();
-      // Re-draw immediately
+      // Optional: we can add a direct redraw right now
       drawNetwork();
       break;
     }
   }
 }
 
-// Event listeners
+// Hook up buttons / clicks
 initBtn.addEventListener('click', initializeNetwork);
 canvas.addEventListener('click', onCanvasClick);
 
-// Initialize once on load
+// Initialize on load
 initializeNetwork();
 </script>
 </body>
