@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Two Oscillators (Slow Vibration)</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      margin: 20px;
+    }
+    #myCanvas {
+      border: 1px solid #aaa;
+      display: block;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h2>Two Coupled Oscillators (Slow Vibration)</h2>
+  <button id="resetButton">Reset Phases</button>
+  <canvas id="myCanvas" width="500" height="200"></canvas>
+
+  <script>
+    // 2x2 adjacency: each oscillator is connected to the other
+    const adjacencyMatrix = [
+      [0, 1],
+      [1, 0]
+    ];
+
+    // Array to hold the phases of the two oscillators
+    let phases = [0, 0];
+
+    // Simulation parameters
+    const dt = 0.05;         // time-step for phase updates
+    const coupling = 0.1;    // small coupling -> slow synchronization
+    const updateIntervalMs = 100; // update every 100 ms
+    const amplitude = 40;    // vertical movement amplitude
+
+    // Canvas setup
+    const canvas = document.getElementById('myCanvas');
+    const ctx = canvas.getContext('2d');
+    const resetButton = document.getElementById('resetButton');
+
+    /**
+     * Randomize phases in [0, 2π)
+     */
+    function randomizePhases() {
+      phases = [
+        2 * Math.PI * Math.random(),
+        2 * Math.PI * Math.random()
+      ];
+    }
+
+    /**
+     * Kuramoto-like phase update (no natural frequency):
+     * θ_i <- θ_i + dt * K * ∑ sin(θ_j - θ_i)
+     */
+    function updatePhases() {
+      const newPhases = [];
+      for (let i = 0; i < 2; i++) {
+        let sumCoupling = 0;
+        for (let j = 0; j < 2; j++) {
+          if (adjacencyMatrix[i][j] === 1) {
+            sumCoupling += Math.sin(phases[j] - phases[i]);
+          }
+        }
+        newPhases[i] = phases[i] + dt * coupling * sumCoupling;
+      }
+      phases = newPhases;
+    }
+
+    /**
+     * Draw the two oscillators, each at fixed x but oscillating y
+     * based on phase. Color depends on phase.
+     */
+    function drawOscillators() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Fixed x-positions for the two oscillators
+      const leftX = canvas.width / 3;
+      const rightX = (2 * canvas.width) / 3;
+
+      // Baseline for vertical centering
+      const centerY = canvas.height / 2;
+      const radius = 25; // radius for the circles
+
+      // Compute (x,y) for each oscillator from its phase
+      const coords = [];
+      for (let i = 0; i < 2; i++) {
+        const x = i === 0 ? leftX : rightX;
+        const y = centerY + amplitude * Math.sin(phases[i]);
+        coords.push({ x, y });
+      }
+
+      // Draw line connecting them
+      ctx.beginPath();
+      ctx.strokeStyle = '#333';
+      ctx.moveTo(coords[0].x, coords[0].y);
+      ctx.lineTo(coords[1].x, coords[1].y);
+      ctx.stroke();
+
+      // Draw each oscillator circle
+      for (let i = 0; i < 2; i++) {
+        // Map phase to a hue so color cycles with phase
+        const hue = ((phases[i] * 180) / Math.PI) % 360;
+        ctx.fillStyle = `hsl(${hue}, 100%, 50%)`;
+
+        ctx.beginPath();
+        ctx.arc(coords[i].x, coords[i].y, radius, 0, 2 * Math.PI);
+        ctx.fill();
+      }
+    }
+
+    /**
+     * One step of the simulation: update phases and redraw
+     */
+    function step() {
+      updatePhases();
+      drawOscillators();
+    }
+
+    // Keep a reference so we can stop/restart the interval
+    let simulationInterval = null;
+
+    /**
+     * Start or restart the simulation
+     */
+    function startSimulation() {
+      if (simulationInterval) {
+        clearInterval(simulationInterval);
+      }
+      randomizePhases();
+      drawOscillators();
+      simulationInterval = setInterval(step, updateIntervalMs);
+    }
+
+    // Reset phases on button click
+    resetButton.addEventListener('click', startSimulation);
+
+    // Start immediately on page load
+    startSimulation();
+  </script>
+</body>
+</html>
