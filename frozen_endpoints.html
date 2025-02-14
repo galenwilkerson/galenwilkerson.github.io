@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Frozen Endpoints Network</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      margin: 20px;
+    }
+    #controls {
+      margin-bottom: 10px;
+    }
+    #myCanvas {
+      border: 1px solid #aaa;
+      display: block;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h2>Network with Frozen Endpoints</h2>
+  <div id="controls">
+    <label for="numNodes">Number of Nodes (>= 2):</label>
+    <input type="number" id="numNodes" value="10" min="2" max="200" />
+    
+    <label for="prob">Connection Probability p:</label>
+    <input type="number" id="prob" value="0.3" step="0.01" min="0" max="1" />
+    
+    <button id="initBtn">Initialize</button>
+  </div>
+  <canvas id="myCanvas" width="800" height="600"></canvas>
+
+  <script>
+    /**
+     * We have N total nodes:
+     *   - Node 0 = A (left side), with fixed phase = 0
+     *   - Node N-1 = B (right side), with fixed phase = π (for example)
+     *   - Other nodes (1..N-2) can update their phases by a Kuramoto-like rule.
+     *
+     * All nodes are placed using a force-directed layout, except we pin A and B on
+     * the left and right edges of the canvas. The adjacency matrix is random with
+     * probability p for edges. We skip updating the phases of A and B.
+     */
+
+    let numberOfNodes;
+    let adjacencyMatrix = [];
+    let phases = [];
+    let positions = [];
+    let velocities = [];
+    let simInterval = null;
+
+    const canvas = document.getElementById('myCanvas');
+    const ctx = canvas.getContext('2d');
+    const numNodesInput = document.getElementById('numNodes');
+    const probInput = document.getElementById('prob');
+    const initBtn = document.getElementById('initBtn');
+
+    // Simulation (Kuramoto) parameters
+    const dt = 0.03;          // time-step
+    const coupling = 1;       // coupling strength
+    const updateIntervalMs = 50;  // ~20 FPS
+    const nodeRadius = 10;
+
+    // Spring layout parameters
+    const layoutIterations = 400;
+    const kRepel = 3000;   
+    const kAttract = 0.1;  
+    const damping = 0.85;  
+
+    /**
+     * createAdjacencyMatrix(n, p)
+     * Returns an n x n matrix with edges present (1) with probability p. No self-loops.
+     */
+    function createAdjacencyMatrix(n, p) {
+      const matrix = [];
+      for (let i = 0; i < n; i++) {
+        matrix[i] = [];
+        for (let j = 0; j < n; j++) {
+          if (i === j) {
+            matrix[i][j] = 0;
+          } else {
+            matrix[i][j] = Math.random() < p ? 1 : 0;
+          }
+        }
+      }
+      return matrix;
+    }
+
+    /**
+     * initializePhases(n)
+     * - Node 0 (A) phase = 0 (frozen)
+     * - Node n-1 (B) phase = π (frozen)
+     * - Others random in [0, 2π)
+     */
+    function initializePhases(n) {
+      const p = [];
+      for (let i = 0; i < n; i++) {
+        p[i] = 2 * Math.PI * Math.random();
+      }
+      p[0] = 0;           // A is locked at phase = 0
+      p[n - 1] = Math.PI; // B is locked at phase = π
+      return p;
+    }
+
+    /**
+     * runSpringLayout()
+     * Force-directed layout for nodes [0..N-1],
+     * but we pin node 0 (A) on the far left, node N-1 (B) on the far right.
+     */
+    function runSpringLayout() {
+      positions = [];
+      velocities = [];
+
+      // Canvas bounds
+      const w = canvas.width;
+      const h = canvas.height;
+
+      for (let i = 0; i < numberOfNodes; i++) {
+        // If it's node 0 (A), place near left
+        if (i === 0) {
+          positions[i] = { x: nodeRadius + 10, y: h / 2 };
+        }
+        // If it's node N-1 (B), place near right
+        else if (i === numberOfNodes - 1) {
+          positions[i] = { x: w - nodeRadius - 10, y: h / 2 };
+        }
+        // Otherwise place randomly
+        else {
+          positions[i] = {
+            x: 50 + Math.random() * (w - 100),
+            y: 50 + Math.random() * (h - 100),
+          };
+        }
+        velocities[i] = { x: 0, y: 0 };
+      }
+
+      // We run layout iterations, but keep node 0 and N-1 pinned
+      for (let iter = 0; iter < layoutIterations; iter++) {
+        const forces = [];
+        for (let i = 0; i < numberOfNodes; i++) {
+          forces[i] = { x: 0, y: 0 };
+        }
+
+        // Repulsion among all pairs
+        for (let i = 0; i < numberOfNodes; i++) {
+          for (let j = i + 1; j < numberOfNodes; j++) {
+            const dx = positions[j].x - positions[i].x;
+            const dy = positions[j].y - positions[i].y;
+            const distSq = dx*dx + dy*dy || 0.0001;
+            const dist = Math.sqrt(distSq);
+
+            const repForce = kRepel / distSq;
+            const fx = repForce * (dx / dist);
+            const fy = repForce * (dy / dist);
+
+            forces[i].x -= fx;
+            forces[i].y -= fy;
+            forces[j].x += fx;
+            forces[j].y += fy;
+          }
+        }
+
+        // Attraction for edges
+        for (let i = 0; i < numberOfNodes; i++) {
+          for (let j = i + 1; j < numberOfNodes; j++) {
+            if (adjacencyMatrix[i][j] === 1) {
+              const dx = positions[j].x - positions[i].x;
+              const dy = positions[j].y - positions[i].y;
+              const dist = Math.sqrt(dx*dx + dy*dy) || 0.0001;
+
+              const attForce = kAttract * dist;
+              const fx = attForce * (dx / dist);
+              const fy = attForce * (dy / dist);
+
+              forces[i].x += fx;
+              forces[i].y += fy;
+              forces[j].x -= fx;
+              forces[j].y -= fy;
+            }
+          }
+        }
+
+        // Update velocities & positions, but pin node 0 & node N-1
+        for (let i = 0; i < numberOfNodes; i++) {
+          // skip pinned nodes
+          if (i === 0 || i === numberOfNodes - 1) continue;
+
+          velocities[i].x = (velocities[i].x + forces[i].x) * damping;
+          velocities[i].y = (velocities[i].y + forces[i].y) * damping;
+
+          positions[i].x += velocities[i].x;
+          positions[i].y += velocities[i].y;
+
+          // clamp to canvas
+          positions[i].x = Math.max(nodeRadius, Math.min(canvas.width - nodeRadius, positions[i].x));
+          positions[i].y = Math.max(nodeRadius, Math.min(canvas.height - nodeRadius, positions[i].y));
+        }
+      }
+    }
+
+    /**
+     * updatePhases()
+     * Discrete Kuramoto-like rule, except we skip node 0 and node N-1 (frozen).
+     *   θ_i <- θ_i + dt * coupling * Σ_j A_ij sin(θ_j - θ_i)
+     */
+    function updatePhases() {
+      const newPhases = [...phases];
+      for (let i = 0; i < numberOfNodes; i++) {
+        // skip the frozen endpoints
+        if (i === 0 || i === numberOfNodes - 1) continue;
+
+        let sumCoupling = 0;
+        for (let j = 0; j < numberOfNodes; j++) {
+          if (adjacencyMatrix[i][j] === 1) {
+            sumCoupling += Math.sin(phases[j] - phases[i]);
+          }
+        }
+        newPhases[i] = phases[i] + dt * coupling * sumCoupling;
+      }
+      phases = newPhases;
+    }
+
+    /**
+     * drawNetwork()
+     * - Edges
+     * - Nodes colored by phase
+     *   (Node 0 = A in black? Node N-1 = B in black? or keep color by phase?)
+     */
+    function drawNetwork() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Edges
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)';
+      for (let i = 0; i < numberOfNodes; i++) {
+        for (let j = i + 1; j < numberOfNodes; j++) {
+          if (adjacencyMatrix[i][j] === 1) {
+            ctx.beginPath();
+            ctx.moveTo(positions[i].x, positions[i].y);
+            ctx.lineTo(positions[j].x, positions[j].y);
+            ctx.stroke();
+          }
+        }
+      }
+
+      // Nodes
+      for (let i = 0; i < numberOfNodes; i++) {
+        if (i === 0) {
+          // Node A: pinned
+          ctx.fillStyle = '#000'; // black
+        } else if (i === numberOfNodes - 1) {
+          // Node B: pinned
+          ctx.fillStyle = '#000'; // black
+        } else {
+          // color by phase
+          const hue = ((phases[i] * 180) / Math.PI) % 360;
+          ctx.fillStyle = `hsl(${hue}, 100%, 50%)`;
+        }
+        ctx.beginPath();
+        ctx.arc(positions[i].x, positions[i].y, nodeRadius, 0, 2*Math.PI);
+        ctx.fill();
+      }
+    }
+
+    /**
+     * step()
+     * update phases (except for A/B) and then draw
+     */
+    function step() {
+      updatePhases();
+      drawNetwork();
+    }
+
+    /**
+     * initializeNetwork()
+     * 1) read number of nodes
+     * 2) create adjacency matrix
+     * 3) run spring layout with pinned endpoints
+     * 4) initialize phases (A=0, B=π, others random)
+     * 5) start simulation
+     */
+    function initializeNetwork() {
+      if (simInterval) clearInterval(simInterval);
+
+      numberOfNodes = parseInt(numNodesInput.value, 10);
+      connectionProbability = parseFloat(probInput.value);
+
+      // Must have at least 2 to define A & B
+      if (numberOfNodes < 2) {
+        alert("Number of Nodes must be >= 2");
+        return;
+      }
+
+      adjacencyMatrix = createAdjacencyMatrix(numberOfNodes, connectionProbability);
+      runSpringLayout();
+
+      phases = initializePhases(numberOfNodes);
+
+      drawNetwork();
+      simInterval = setInterval(step, updateIntervalMs);
+    }
+
+    initBtn.addEventListener('click', initializeNetwork);
+
+    // Start once on load
+    initializeNetwork();
+  </script>
+</body>
+</html>
