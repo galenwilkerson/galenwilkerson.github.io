@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>Two Oscillators (Slow Vibration)</title>
+  <title>Two Oscillators (Slow, High-Amplitude Vibration)</title>
   <style>
     body {
       font-family: sans-serif;
@@ -16,9 +16,9 @@
   </style>
 </head>
 <body>
-  <h2>Two Coupled Oscillators (Slow Vibration)</h2>
+  <h2>Two Coupled Oscillators (Slow, High-Amplitude Vibration)</h2>
   <button id="resetButton">Reset Phases</button>
-  <canvas id="myCanvas" width="500" height="200"></canvas>
+  <canvas id="myCanvas" width="500" height="250"></canvas>
 
   <script>
     // 2x2 adjacency: each oscillator is connected to the other
@@ -31,10 +31,10 @@
     let phases = [0, 0];
 
     // Simulation parameters
-    const dt = 0.05;         // time-step for phase updates
-    const coupling = 0.1;    // small coupling -> slow synchronization
-    const updateIntervalMs = 100; // update every 100 ms
-    const amplitude = 40;    // vertical movement amplitude
+    const dt = 0.05;          // time step for the phase updates
+    const coupling = 0.1;     // small coupling -> slow synchronization
+    const amplitude = 80;     // large amplitude for clear vertical movement
+    const updateIntervalMs = 100; // update every 100 ms -> slow visuals
 
     // Canvas setup
     const canvas = document.getElementById('myCanvas');
@@ -53,7 +53,7 @@
 
     /**
      * Kuramoto-like phase update (no natural frequency):
-     * θ_i <- θ_i + dt * K * ∑ sin(θ_j - θ_i)
+     *   θ_i <- θ_i + dt * K * Σ sin(θ_j - θ_i)
      */
     function updatePhases() {
       const newPhases = [];
@@ -70,21 +70,20 @@
     }
 
     /**
-     * Draw the two oscillators, each at fixed x but oscillating y
-     * based on phase. Color depends on phase.
+     * Draw the two oscillators, each at a fixed x but oscillating y
      */
     function drawOscillators() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // Fixed x-positions for the two oscillators
+      // x-positions for the two oscillators
       const leftX = canvas.width / 3;
       const rightX = (2 * canvas.width) / 3;
 
-      // Baseline for vertical centering
+      // vertical midpoint
       const centerY = canvas.height / 2;
-      const radius = 25; // radius for the circles
+      const radius = 25; // circle radius
 
-      // Compute (x,y) for each oscillator from its phase
+      // Calculate each oscillator's position from its phase
       const coords = [];
       for (let i = 0; i < 2; i++) {
         const x = i === 0 ? leftX : rightX;
@@ -94,17 +93,14 @@
 
       // Draw line connecting them
       ctx.beginPath();
-      ctx.strokeStyle = '#333';
+      ctx.strokeStyle = '#555';
       ctx.moveTo(coords[0].x, coords[0].y);
       ctx.lineTo(coords[1].x, coords[1].y);
       ctx.stroke();
 
-      // Draw each oscillator circle
+      // Draw each oscillator as a black circle
+      ctx.fillStyle = '#333';
       for (let i = 0; i < 2; i++) {
-        // Map phase to a hue so color cycles with phase
-        const hue = ((phases[i] * 180) / Math.PI) % 360;
-        ctx.fillStyle = `hsl(${hue}, 100%, 50%)`;
-
         ctx.beginPath();
         ctx.arc(coords[i].x, coords[i].y, radius, 0, 2 * Math.PI);
         ctx.fill();
@@ -119,7 +115,7 @@
       drawOscillators();
     }
 
-    // Keep a reference so we can stop/restart the interval
+    // Keep a reference to stop/restart the interval
     let simulationInterval = null;
 
     /**
