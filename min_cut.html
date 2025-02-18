@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Two Subgraphs + Simple Oscillator Demo</title>
+  <style>
+    body { font-family: sans-serif; }
+    #output { white-space: pre; }
+  </style>
+</head>
+<body>
+
+<h2>Two Moderately Dense Graphs, Few Cross-Edges, Simple Oscillator Demo</h2>
+<pre id="output"></pre>
+
+<script>
+/**
+ * Creates a random undirected graph with numNodes vertices and approx. numEdges edges.
+ * Returns an adjacency list: adjacency[node] = array of neighbor indices.
+ */
+function createRandomGraph(numNodes, numEdges) {
+  const adjacency = [];
+  for (let i = 0; i < numNodes; i++) {
+    adjacency[i] = [];
+  }
+
+  let edgesAdded = 0;
+  while (edgesAdded < numEdges) {
+    const a = Math.floor(Math.random() * numNodes);
+    const b = Math.floor(Math.random() * numNodes);
+    // Avoid self-loops and duplicates
+    if (a !== b && !adjacency[a].includes(b)) {
+      adjacency[a].push(b);
+      adjacency[b].push(a);
+      edgesAdded++;
+    }
+  }
+  return adjacency;
+}
+
+/**
+ * Merges two adjacency lists into one, offsetting indices of the second graph.
+ * crossEdges indicates how many random edges to add between the two subgraphs.
+ */
+function mergeGraphs(g1, g2, crossEdges) {
+  const n1 = g1.length;
+  const n2 = g2.length;
+  const combined = [];
+
+  // Copy g1 adjacency
+  for (let i = 0; i < n1; i++) {
+    combined[i] = [...g1[i]];
+  }
+  // Extend adjacency to hold g2
+  for (let i = 0; i < n2; i++) {
+    combined[n1 + i] = [];
+  }
+  // Copy edges from g2, offset by n1
+  for (let i = 0; i < n2; i++) {
+    for (let nbr of g2[i]) {
+      combined[n1 + i].push(n1 + nbr);
+    }
+  }
+
+  // Random cross-edges
+  let count = 0;
+  while (count < crossEdges) {
+    const a = Math.floor(Math.random() * n1);          // node in subgraph 1
+    const b = n1 + Math.floor(Math.random() * n2);     // node in subgraph 2
+    if (!combined[a].includes(b)) {
+      combined[a].push(b);
+      combined[b].push(a);
+      count++;
+    }
+  }
+  return combined;
+}
+
+/**
+ * Discrete-time simulation of simple phase oscillators.
+ *   - phases[i] is node i's phase
+ *   - adjacency[i] gives its neighbors
+ *   - Euler steps:
+ *       phase[i](t+1) = phase[i](t) + dt*(baseFreq + K * sum_j sin(phase[j] - phase[i]))
+ * Returns the final phases.
+ */
+function simulateOscillators(adjacency, steps = 300) {
+  const n = adjacency.length;
+  // All constants can be tweaked
+  const dt = 0.1;
+  const baseFreq = 1.0;
+  const K = 1.0;
+
+  // Initialize random phases in [0,2π)
+  let phases = [];
+  for (let i = 0; i < n; i++) {
+    phases[i] = 2 * Math.PI * Math.random();
+  }
+
+  for (let step = 0; step < steps; step++) {
+    const nextPhases = new Array(n);
+    for (let i = 0; i < n; i++) {
+      let couplingSum = 0;
+      for (let j of adjacency[i]) {
+        couplingSum += Math.sin(phases[j] - phases[i]);
+      }
+      nextPhases[i] = phases[i] + dt * (baseFreq + K*couplingSum);
+    }
+    phases = nextPhases;
+  }
+
+  // Wrap phases to [0, 2π)
+  for (let i = 0; i < n; i++) {
+    phases[i] = (phases[i] % (2*Math.PI) + 2*Math.PI) % (2*Math.PI);
+  }
+
+  return phases;
+}
+
+/**
+ * Clusters nodes whose final phases are within a certain threshold of each other.
+ * Uses a simple BFS or DFS approach.
+ */
+function clusterByPhase(phases, threshold = 0.4) {
+  const n = phases.length;
+  const visited = new Array(n).fill(false);
+  const clusters = [];
+
+  for (let i = 0; i < n; i++) {
+    if (!visited[i]) {
+      const stack = [i];
+      visited[i] = true;
+      const cluster = [i];
+      while (stack.length > 0) {
+        const current = stack.pop();
+        for (let j = 0; j < n; j++) {
+          if (!visited[j]) {
+            // measure phase difference
+            let diff = Math.abs(phases[j] - phases[current]);
+            diff = Math.min(diff, 2*Math.PI - diff); // handle wrap-around
+            if (diff < threshold) {
+              visited[j] = true;
+              stack.push(j);
+              cluster.push(j);
+            }
+          }
+        }
+      }
+      clusters.push(cluster);
+    }
+  }
+  return clusters;
+}
+
+/*** DEMO ***/
+(function main() {
+  const outputEl = document.getElementById("output");
+
+  // Two moderately dense graphs:
+  // For example, 10 nodes, ~25 edges => moderate density
+  const g1 = createRandomGraph(10, 25);
+  const g2 = createRandomGraph(10, 25);
+
+  // We'll create ~5 cross-edges between them
+  const merged = mergeGraphs(g1, g2, 5);
+
+  // Run oscillator simulation
+  const finalPhases = simulateOscillators(merged, 400);
+
+  // Cluster nodes by final phases
+  const clusters = clusterByPhase(finalPhases, 0.4);
+
+  // Show results
+  let text = "Created two subgraphs:\n";
+  text += "  - G1: nodes [0..9]\n";
+  text += "  - G2: nodes [10..19]\n";
+  text += "We merged them with 5 cross-edges.\n\n";
+  text += "Final phases (approx):\n";
+  text += finalPhases.map(p => p.toFixed(2)).join(", ") + "\n\n";
+  text += "Clusters (based on threshold=0.4):\n";
+  text += JSON.stringify(clusters) + "\n";
+  text += "If clusters mostly align with [0..9] vs [10..19], the subgraphs remain distinct.\n";
+  text += "If the cross-edges cause enough coupling, they might form mixed clusters.\n";
+  outputEl.textContent = text;
+
+  console.log("Merged adjacency list:", merged);
+  console.log("Final phases:", finalPhases);
+  console.log("Clusters:", clusters);
+})();
+</script>
+</body>
+</html>
