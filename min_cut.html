@@ -1,320 +1,343 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>Oscillator Min-Cut Demo (Force-Directed Layout)</title>
+  <meta charset="UTF-8">
+  <title>Oscillator Min-Cut Demo (Force Layout + Phase Timeline)</title>
   <style>
     body {
       font-family: sans-serif;
       margin: 20px;
     }
+    #container {
+      display: flex; /* put canvases side by side */
+    }
+    #graphCanvas, #phaseCanvas {
+      border: 1px solid #aaa;
+      margin-right: 10px;
+    }
     #controls {
       margin-bottom: 10px;
-    }
-    #canvasArea {
-      border: 1px solid #aaa;
-      display: block;
-      margin-top: 10px;
     }
   </style>
 </head>
 <body>
-  <h2>Oscillator Min-Cut Demo with Force-Directed Layout</h2>
 
-  <p>
-    This demo splits the oscillators into two subgraphs (each half of <code>numOsc</code>),
-    connects them internally with a chosen probability, adds a user-specified number of cross-edges,
-    and then:
-  </p>
-  <ul>
-    <li><strong>Uses a simple force-directed approach</strong> (spring attraction on edges + mutual repulsion)
-        to place the nodes in 2D without overlapping, while clamping them to the canvas.</li>
-    <li><strong>Runs a basic oscillator synchronization</strong> on the same graph, coloring each node by its
-        current phase in real time.</li>
-  </ul>
-  <p>
-    If the subgraphs remain only weakly connected, the oscillators often converge to different phase clusters,
-    suggesting a kind of "cut" between the two halves.
-  </p>
+<h2>Oscillator Min-Cut Demo (Force-Directed Layout + Phase Timeline)</h2>
+<p>
+  This demonstration splits the oscillators into two subgraphs (each half of <code>numOsc</code>),
+  connects them internally at probability <code>p</code>, adds a user-selected number of cross-edges,
+  and uses a force-directed method to position the nodes. Each node also acts as a phase oscillator.
+  On the left canvas, nodes are colored by their current phase in real time; on the right canvas,
+  you’ll see a running timeline of each node's phase (one row per node, time moving left-to-right).
+</p>
 
-  <div id="controls">
-    <label for="oscInput">Total Oscillators (even):</label>
-    <input type="number" id="oscInput" value="20" step="2" min="2" max="300" />
-    <label for="probInput">Intra-Subgraph p:</label>
-    <input type="number" id="probInput" value="0.9" step="0.01" min="0" max="1" />
-    <label for="crossInput">Cross-Edges:</label>
-    <input type="number" id="crossInput" value="1" min="0" max="100" />
-    <button id="initButton">Initialize</button>
-  </div>
+<div id="controls">
+  <label for="oscInput">Total Oscillators (even):</label>
+  <input type="number" id="oscInput" value="20" step="2" min="2" max="300" />
+  <label for="probInput">Intra-Subgraph p:</label>
+  <input type="number" id="probInput" value="0.3" step="0.01" min="0" max="1" />
+  <label for="crossInput">Cross-Edges:</label>
+  <input type="number" id="crossInput" value="1" min="0" max="100" />
+  <button id="initButton">Initialize</button>
+</div>
 
-  <canvas id="canvasArea" width="600" height="600"></canvas>
+<div id="container">
+  <!-- Main graph layout canvas -->
+  <canvas id="graphCanvas" width="600" height="600"></canvas>
+  <!-- Phase timeline canvas -->
+  <canvas id="phaseCanvas" width="200" height="600"></canvas>
+</div>
 
-  <script>
-    /******************************************
-     * Global-ish variables & DOM elements
-     ******************************************/
-    const canvas = document.getElementById('canvasArea');
-    const ctx = canvas.getContext('2d');
-    const oscInput   = document.getElementById('oscInput');
-    const probInput  = document.getElementById('probInput');
-    const crossInput = document.getElementById('crossInput');
-    const initButton = document.getElementById('initButton');
+<script>
+/******************************************************
+ * GLOBALS & DOM Elements
+ ******************************************************/
+const graphCanvas  = document.getElementById("graphCanvas");
+const graphCtx     = graphCanvas.getContext("2d");
+const phaseCanvas  = document.getElementById("phaseCanvas");
+const phaseCtx     = phaseCanvas.getContext("2d");
 
-    let numberOfOscillators, subSize;
-    let adjacency = [];  // adjacency[i][j] = 1 if edge, else 0
-    let nodes = [];      // { x, y, vx, vy, phase }
-    let simInterval;
+const oscInput     = document.getElementById("oscInput");
+const probInput    = document.getElementById("probInput");
+const crossInput   = document.getElementById("crossInput");
+const initButton   = document.getElementById("initButton");
 
-    // Force layout parameters
-    const springK     = 0.0005; // how strong edges pull
-    const springRest  = 50;     // rest length for edges
-    const repulsionK  = 2000;   // repulsive force factor
-    const friction    = 0.90;   // velocity damping
-    // Oscillator parameters
-    const dt          = 0.05;   // time step for oscillator update
-    const coupling    = 1.0;    // oscillator coupling strength
+let numberOfOscillators, subSize;
+let adjacency = [];  // adjacency[i][j] = 1 if there's an edge
+let nodes = [];      // array of { x, y, vx, vy, phase }
+let simInterval;     // setInterval handle
+let timeStep = 0;    // for plotting phase timeline
 
-    const frameRate   = 30;     // how many updates per second
+// Force layout parameters
+const springK    = 0.0005;
+const springRest = 50;
+const repulsionK = 2000;
+const friction   = 0.90;
 
-    /******************************************
-     * Graph creation
-     ******************************************/
-    function createRandomAdjMatrix(n, prob) {
-      // n x n adjacency, random edges with probability prob
-      const matrix = [];
-      for (let i = 0; i < n; i++) {
-        matrix[i] = new Array(n).fill(0);
-      }
-      for (let i = 0; i < n; i++) {
-        for (let j = i+1; j < n; j++) {
-          if (Math.random() < prob) {
-            matrix[i][j] = 1;
-            matrix[j][i] = 1;
-          }
-        }
-      }
-      return matrix;
-    }
+// Oscillator parameters
+const dt       = 0.05; 
+const coupling = 1.0;
 
-    function mergeSubgraphs(A, B, crossCount) {
-      const sizeA = A.length;
-      const sizeB = B.length;
-      const total = sizeA + sizeB;
-      const combined = [];
-      for (let i = 0; i < total; i++) {
-        combined[i] = new Array(total).fill(0);
-      }
-      // Copy A
-      for (let i = 0; i < sizeA; i++) {
-        for (let j = 0; j < sizeA; j++) {
-          combined[i][j] = A[i][j];
-        }
-      }
-      // Copy B
-      for (let i = 0; i < sizeB; i++) {
-        for (let j = 0; j < sizeB; j++) {
-          combined[sizeA + i][sizeA + j] = B[i][j];
-        }
-      }
-      // random cross edges
-      let added = 0;
-      while (added < crossCount) {
-        const a = Math.floor(Math.random() * sizeA);
-        const b = sizeA + Math.floor(Math.random() * sizeB);
-        if (combined[a][b] === 0) {
-          combined[a][b] = 1;
-          combined[b][a] = 1;
-          added++;
-        }
-      }
-      return combined;
-    }
+// Simulation update frequency (FPS)
+const frameRate = 30;
 
-    /******************************************
-     * Initialization & random node placement
-     ******************************************/
-    function initNodes(n) {
-      const arr = [];
-      const w = canvas.width, h = canvas.height;
-      for (let i = 0; i < n; i++) {
-        arr.push({
-          // random positions within canvas
-          x: Math.random() * w,
-          y: Math.random() * h,
-          vx: 0,  // velocity
-          vy: 0,
-          // random initial phase
-          phase: Math.random() * 2 * Math.PI
-        });
-      }
-      return arr;
-    }
-
-    /******************************************
-     * Force-based layout (basic approach)
-     ******************************************/
-    function updateForces() {
-      const n = nodes.length;
-
-      // Zero out accelerations or we can just do direct velocity updates
-      for (let i = 0; i < n; i++) {
-        // We'll accumulate forces in vx, vy for convenience
-        nodes[i].vx *= friction;
-        nodes[i].vy *= friction;
-      }
-
-      // Edge-based attraction (spring)
-      for (let i = 0; i < n; i++) {
-        for (let j = i+1; j < n; j++) {
-          if (adjacency[i][j] === 1) {
-            const dx = nodes[j].x - nodes[i].x;
-            const dy = nodes[j].y - nodes[i].y;
-            const dist = Math.sqrt(dx*dx + dy*dy) || 0.0001;
-            // Hooke's law F = -k (dist - rest)
-            const diff = dist - springRest;
-            const force = springK * diff;
-            // direction
-            const fx = force * (dx / dist);
-            const fy = force * (dy / dist);
-
-            // apply
-            nodes[i].vx += fx;
-            nodes[i].vy += fy;
-            nodes[j].vx -= fx;
-            nodes[j].vy -= fy;
-          }
-        }
-      }
-
-      // Node-node repulsion
-      for (let i = 0; i < n; i++) {
-        for (let j = i+1; j < n; j++) {
-          const dx = nodes[j].x - nodes[i].x;
-          const dy = nodes[j].y - nodes[i].y;
-          const dist2 = dx*dx + dy*dy || 0.0001;
-          const dist = Math.sqrt(dist2);
-          // Coulomb-like repulsion
-          const repF = repulsionK / dist2;
-          const fx = repF * (dx / dist);
-          const fy = repF * (dy / dist);
-
-          nodes[i].vx -= fx;
-          nodes[i].vy -= fy;
-          nodes[j].vx += fx;
-          nodes[j].vy += fy;
-        }
-      }
-
-      // Update positions & clamp to canvas
-      for (let i = 0; i < n; i++) {
-        nodes[i].x += nodes[i].vx;
-        nodes[i].y += nodes[i].vy;
-
-        // clamp so nodes stay on screen
-        if (nodes[i].x < 10) nodes[i].x = 10;
-        if (nodes[i].x > canvas.width - 10) nodes[i].x = canvas.width - 10;
-        if (nodes[i].y < 10) nodes[i].y = 10;
-        if (nodes[i].y > canvas.height - 10) nodes[i].y = canvas.height - 10;
+/******************************************************
+ * GRAPH CREATION
+ ******************************************************/
+function createRandomAdjMatrix(n, prob) {
+  const matrix = [];
+  for (let i = 0; i < n; i++) {
+    matrix[i] = new Array(n).fill(0);
+  }
+  for (let i = 0; i < n; i++) {
+    for (let j = i+1; j < n; j++) {
+      if (Math.random() < prob) {
+        matrix[i][j] = 1;
+        matrix[j][i] = 1;
       }
     }
+  }
+  return matrix;
+}
 
-    /******************************************
-     * Oscillator update
-     ******************************************/
-    function updateOscillators() {
-      const n = nodes.length;
-      const newPhases = new Array(n);
-      for (let i = 0; i < n; i++) {
-        let sumCoupling = 0;
-        for (let j = 0; j < n; j++) {
-          if (adjacency[i][j] === 1) {
-            sumCoupling += Math.sin(nodes[j].phase - nodes[i].phase);
-          }
-        }
-        newPhases[i] = nodes[i].phase + dt * coupling * sumCoupling;
-      }
-      for (let i = 0; i < n; i++) {
-        newPhases[i] = (newPhases[i] + 2*Math.PI) % (2*Math.PI);
-        nodes[i].phase = newPhases[i];
+function mergeSubgraphs(A, B, crossCount) {
+  const sizeA = A.length;
+  const sizeB = B.length;
+  const total = sizeA + sizeB;
+  const combined = [];
+  for (let i = 0; i < total; i++) {
+    combined[i] = new Array(total).fill(0);
+  }
+  // Copy A
+  for (let i = 0; i < sizeA; i++) {
+    for (let j = 0; j < sizeA; j++) {
+      combined[i][j] = A[i][j];
+    }
+  }
+  // Copy B
+  for (let i = 0; i < sizeB; i++) {
+    for (let j = 0; j < sizeB; j++) {
+      combined[sizeA + i][sizeA + j] = B[i][j];
+    }
+  }
+  // Add cross edges
+  let added = 0;
+  while (added < crossCount) {
+    const a = Math.floor(Math.random() * sizeA);
+    const b = sizeA + Math.floor(Math.random() * sizeB);
+    if (combined[a][b] === 0) {
+      combined[a][b] = 1;
+      combined[b][a] = 1;
+      added++;
+    }
+  }
+  return combined;
+}
+
+/******************************************************
+ * FORCE-DIRECTED LAYOUT
+ ******************************************************/
+function updateForces() {
+  const n = nodes.length;
+
+  // Dampen velocities
+  for (let i = 0; i < n; i++) {
+    nodes[i].vx *= friction;
+    nodes[i].vy *= friction;
+  }
+
+  // Edge-based attraction
+  for (let i = 0; i < n; i++) {
+    for (let j = i+1; j < n; j++) {
+      if (adjacency[i][j] === 1) {
+        const dx = nodes[j].x - nodes[i].x;
+        const dy = nodes[j].y - nodes[i].y;
+        const dist = Math.sqrt(dx*dx + dy*dy) || 0.0001;
+        const diff = dist - springRest;
+        const force = springK * diff;
+        const fx = force * (dx / dist);
+        const fy = force * (dy / dist);
+
+        nodes[i].vx += fx;
+        nodes[i].vy += fy;
+        nodes[j].vx -= fx;
+        nodes[j].vy -= fy;
       }
     }
+  }
 
-    /******************************************
-     * Rendering
-     ******************************************/
-    function drawFrame() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+  // Node-node repulsion
+  for (let i = 0; i < n; i++) {
+    for (let j = i+1; j < n; j++) {
+      const dx = nodes[j].x - nodes[i].x;
+      const dy = nodes[j].y - nodes[i].y;
+      const dist2 = dx*dx + dy*dy || 0.0001;
+      const dist = Math.sqrt(dist2);
+      const repF = repulsionK / dist2;
+      const fx = repF * (dx / dist);
+      const fy = repF * (dy / dist);
 
-      // Edges
-      ctx.strokeStyle = 'rgba(0,0,0,0.2)';
-      for (let i = 0; i < nodes.length; i++) {
-        for (let j = i+1; j < nodes.length; j++) {
-          if (adjacency[i][j] === 1) {
-            ctx.beginPath();
-            ctx.moveTo(nodes[i].x, nodes[i].y);
-            ctx.lineTo(nodes[j].x, nodes[j].y);
-            ctx.stroke();
-          }
-        }
-      }
+      nodes[i].vx -= fx;
+      nodes[i].vy -= fy;
+      nodes[j].vx += fx;
+      nodes[j].vy += fy;
+    }
+  }
 
-      // Nodes
-      const nodeRadius = 8;
-      for (let i = 0; i < nodes.length; i++) {
-        const hue = (nodes[i].phase * 180 / Math.PI) % 360;
-        ctx.fillStyle = `hsl(${hue},100%,50%)`;
-        ctx.beginPath();
-        ctx.arc(nodes[i].x, nodes[i].y, nodeRadius, 0, 2*Math.PI);
-        ctx.fill();
+  // Update positions & clamp
+  for (let i = 0; i < n; i++) {
+    nodes[i].x += nodes[i].vx;
+    nodes[i].y += nodes[i].vy;
+    // clamp to canvas
+    if (nodes[i].x < 10) nodes[i].x = 10;
+    if (nodes[i].x > graphCanvas.width - 10) 
+      nodes[i].x = graphCanvas.width - 10;
+    if (nodes[i].y < 10) nodes[i].y = 10;
+    if (nodes[i].y > graphCanvas.height - 10) 
+      nodes[i].y = graphCanvas.height - 10;
+  }
+}
+
+/******************************************************
+ * OSCILLATOR UPDATE
+ ******************************************************/
+function updateOscillators() {
+  const n = nodes.length;
+  const newPhases = new Array(n);
+  for (let i = 0; i < n; i++) {
+    let sum = 0;
+    for (let j = 0; j < n; j++) {
+      if (adjacency[i][j] === 1) {
+        sum += Math.sin(nodes[j].phase - nodes[i].phase);
       }
     }
+    newPhases[i] = nodes[i].phase + dt * coupling * sum;
+  }
+  for (let i = 0; i < n; i++) {
+    // wrap to [0, 2π)
+    newPhases[i] = (newPhases[i] + 2*Math.PI) % (2*Math.PI);
+    nodes[i].phase = newPhases[i];
+  }
+}
 
-    /******************************************
-     * Single step: update forces, update oscillators, then draw
-     ******************************************/
-    function step() {
-      // 1) Force-based layout
-      updateForces();
-      // 2) Oscillators
-      updateOscillators();
-      // 3) Render
-      drawFrame();
-    }
+/******************************************************
+ * DRAW MAIN CANVAS
+ ******************************************************/
+function drawGraphCanvas() {
+  graphCtx.clearRect(0, 0, graphCanvas.width, graphCanvas.height);
 
-    /******************************************
-     * Initialization
-     ******************************************/
-    function initialize() {
-      if (simInterval) {
-        clearInterval(simInterval);
+  // Edges
+  graphCtx.strokeStyle = 'rgba(0,0,0,0.2)';
+  for (let i = 0; i < nodes.length; i++) {
+    for (let j = i+1; j < nodes.length; j++) {
+      if (adjacency[i][j] === 1) {
+        graphCtx.beginPath();
+        graphCtx.moveTo(nodes[i].x, nodes[i].y);
+        graphCtx.lineTo(nodes[j].x, nodes[j].y);
+        graphCtx.stroke();
       }
-      numberOfOscillators = parseInt(oscInput.value, 10);
-      const prob = parseFloat(probInput.value);
-      const cross = parseInt(crossInput.value, 10);
-
-      if (numberOfOscillators < 2 || numberOfOscillators % 2 !== 0) {
-        alert("Please specify an even number of oscillators >= 2");
-        return;
-      }
-
-      subSize = numberOfOscillators / 2;
-
-      // Create two subgraphs
-      const A = createRandomAdjMatrix(subSize, prob);
-      const B = createRandomAdjMatrix(subSize, prob);
-      adjacency = mergeSubgraphs(A, B, cross);
-
-      // Initialize node positions & phases
-      nodes = initNodes(numberOfOscillators);
-
-      // Start simulation
-      drawFrame();
-      simInterval = setInterval(step, 1000 / frameRate);
     }
+  }
 
-    initButton.addEventListener('click', initialize);
-    // auto-init on load
-    initialize();
-  </script>
+  // Nodes
+  const r = 8; // node radius
+  for (let i = 0; i < nodes.length; i++) {
+    const hue = (nodes[i].phase * 180 / Math.PI) % 360;
+    graphCtx.fillStyle = `hsl(${hue},100%,50%)`;
+    graphCtx.beginPath();
+    graphCtx.arc(nodes[i].x, nodes[i].y, r, 0, 2*Math.PI);
+    graphCtx.fill();
+  }
+}
+
+/******************************************************
+ * DRAW PHASE TIMELINE
+ * We treat X as time, Y as node index
+ ******************************************************/
+function drawPhaseTimeline() {
+  const n = nodes.length;
+  // Each step is drawn as one vertical column (x = timeStep mod width)
+  const x = timeStep % phaseCanvas.width;
+  // We'll clear that vertical strip
+  phaseCtx.clearRect(x, 0, 1, phaseCanvas.height);
+
+  // We'll define rowHeight
+  const rowHeight = phaseCanvas.height / n;
+  
+  for (let i = 0; i < n; i++) {
+    const hue = (nodes[i].phase * 180 / Math.PI) % 360;
+    phaseCtx.fillStyle = `hsl(${hue}, 100%, 50%)`;
+    const y = i * rowHeight;
+    phaseCtx.fillRect(x, y, 1, rowHeight);
+  }
+  timeStep++;
+}
+
+/******************************************************
+ * MAIN STEP
+ ******************************************************/
+function step() {
+  updateForces();      // Force layout
+  updateOscillators(); // Phase update
+  drawGraphCanvas();   // Render main
+  drawPhaseTimeline(); // Render timeline
+}
+
+/******************************************************
+ * NODE INITIALIZATION
+ ******************************************************/
+function initNodes(n) {
+  const arr = [];
+  for (let i = 0; i < n; i++) {
+    arr.push({
+      x: Math.random() * graphCanvas.width,
+      y: Math.random() * graphCanvas.height,
+      vx: 0,
+      vy: 0,
+      phase: Math.random() * 2*Math.PI
+    });
+  }
+  return arr;
+}
+
+/******************************************************
+ * INITIALIZE
+ ******************************************************/
+function initialize() {
+  if (simInterval) clearInterval(simInterval);
+
+  numberOfOscillators = parseInt(oscInput.value, 10);
+  if (numberOfOscillators < 2 || (numberOfOscillators % 2 !== 0)) {
+    alert("Please specify an even number of oscillators >= 2.");
+    return;
+  }
+  subSize = numberOfOscillators / 2;
+
+  const p     = parseFloat(probInput.value);
+  const cross = parseInt(crossInput.value, 10);
+
+  // Create subgraphs
+  const A = createRandomAdjMatrix(subSize, p);
+  const B = createRandomAdjMatrix(subSize, p);
+  adjacency = mergeSubgraphs(A, B, cross);
+
+  // Create nodes with random positions / phases
+  nodes = initNodes(numberOfOscillators);
+
+  // Reset timeline
+  timeStep = 0;
+  phaseCtx.clearRect(0, 0, phaseCanvas.width, phaseCanvas.height);
+
+  // Start simulation
+  step(); // draw 1 frame
+  simInterval = setInterval(step, 1000 / frameRate);
+}
+
+// Hook up button
+initButton.addEventListener('click', initialize);
+
+// Auto-init on load
+initialize();
+</script>
 </body>
 </html>
