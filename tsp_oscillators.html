@@ -4,26 +4,30 @@
     <meta charset="UTF-8">
     <title>Oscillator TSP Solver with Animation</title>
     <style>
-        canvas { border: 1px solid black; }
-        body { font-family: Arial, sans-serif; margin: 20px; }
-        #description { max-width: 600px; margin-top: 20px; font-size: 14px; line-height: 1.5; }
+        body { font-family: Arial, sans-serif; margin: 20px; display: flex; flex-direction: column; }
+        #canvasContainer { display: flex; justify-content: space-between; }
+        canvas { border: 1px solid black; margin: 10px; }
+        #description { max-width: 800px; margin-top: 20px; font-size: 14px; line-height: 1.5; }
     </style>
 </head>
 <body>
     <h1>TSP Solver with Oscillators</h1>
-    <canvas id="tspCanvas" width="400" height="400"></canvas>
+    <div id="canvasContainer">
+        <canvas id="oscillatorCanvas" width="200" height="200"></canvas>
+        <canvas id="tspCanvas" width="400" height="400"></canvas>
+    </div>
     <p id="result">Running...</p>
     <div id="description">
         <h2>What’s Happening?</h2>
         <p>This webpage uses a network of oscillators to solve the Traveling Salesman Problem (TSP) for 6 cities with random locations each reload. Here's how it works:</p>
         <ol>
-            <li><strong>Initial Display:</strong> Six blue dots (cities) appear at random coordinates within the 400x400 canvas, labeled City 0 to City 5. Below, you see the iteration count, current tour, and shortest tour found so far (initially "N/A").</li>
-            <li><strong>Animation Begins:</strong> Oscillators represent city-step assignments, starting undecided (0.5). They "vibrate" to minimize energy, balancing constraints (one city per step, one step per city) and tour length.</li>
-            <li><strong>Evolving Tour:</strong> Red lines (current tour) start chaotic, evolving into a full tour (e.g., 0 -> 1 -> 2 -> 3 -> 4 -> 5). Green lines show the shortest tour found so far, updating as better solutions emerge.</li>
-            <li><strong>Convergence:</strong> Around 500–1000 iterations, oscillators settle into a valid tour (e.g., length ~500–600 units, depending on city placement). The shortest tour often matches or improves on the final tour.</li>
-            <li><strong>Visual Intuition:</strong> Red lines "dance" as oscillators synchronize, while green lines stabilize on the best solution, mimicking a physical system finding a low-energy state.</li>
+            <li><strong>Initial Display:</strong> Left: A 6x6 grid shows the oscillator states (brightness = 0 to 1). Right: Six blue dots (cities) appear at random coordinates. Below, see the current and shortest tours (initially "N/A").</li>
+            <li><strong>Animation Begins:</strong> Oscillators (left) start at 0.5, vibrating to minimize energy (constraints: one city per step, one step per city; goal: short tour). Red lines (right) show the current tour.</li>
+            <li><strong>Evolving Tour:</strong> Left: The grid darkens/lightens as oscillators synchronize. Right: Red lines evolve from chaos (e.g., partial tours) to a full tour (e.g., 0 -> 1 -> 2 -> 3 -> 4 -> 5). Green lines show the shortest tour found so far.</li>
+            <li><strong>Convergence:</strong> After ~500–1000 iterations, oscillators settle (left: clear 1s and 0s; right: stable red tour, green shortest tour, e.g., ~500–600 units).</li>
+            <li><strong>Visual Intuition:</strong> Left: Oscillator "dance" reflects energy minimization. Right: Red lines form the tour, green tracks the best solution, like a physical system settling.</li>
         </ol>
-        <p><em>Note:</em> This is a heuristic approximation; the final tour isn’t always optimal, but it shows oscillators converging. Reload to see a new random layout!</p>
+        <p><em>Note:</em> This is heuristic; the final tour isn’t always optimal. Reload for a new layout!</p>
     </div>
     <script>
         // TSP instance: 6 cities with random (x, y) coordinates
@@ -47,10 +51,10 @@
         let V = Array(n).fill().map(() => Array(n).fill(0.5)); // Initial state: neutral
 
         // Parameters
-        const A = 500;  // Constraint penalty (one city per step)
-        const B = 500;  // Constraint penalty (each step has one city)
+        const A = 500;  // Constraint penalty
+        const B = 500;  // Constraint penalty
         const D = 50;   // Distance cost
-        const dt = 0.01; // Time step
+        const dt = 0.005; // Slower time step for visible animation
         const maxIter = 2000; // Max iterations
 
         // Track shortest tour
@@ -64,18 +68,16 @@
 
             for (let i = 0; i < n; i++) {
                 for (let x = 0; x < n; x++) {
-                    let sumA = 0; // Row constraint
-                    let sumB = 0; // Column constraint
-                    let sumD = 0; // Distance term
+                    let sumA = 0;
+                    let sumB = 0;
+                    let sumD = 0;
 
                     for (let y = 0; y < n; y++) {
                         if (y !== x) sumA += V[i][y];
                     }
-
                     for (let k = 0; k < n; k++) {
                         if (k !== i) sumB += V[k][x];
                     }
-
                     for (let j = 0; j < n; j++) {
                         for (let y = 0; y < n; y++) {
                             if (y !== x) {
@@ -87,14 +89,14 @@
                     dV[i][x] = -A * sumA - B * sumB - D * sumD;
                     let newV = V[i][x] + dt * dV[i][x];
                     newV = Math.max(0, Math.min(1, newV));
-                    if (Math.abs(newV - V[i][x]) > 0.001) converged = false;
+                    if (Math.abs(newV - V[i][x]) > 0.01) converged = false; // Looser threshold
                     V[i][x] = newV;
                 }
             }
             return converged;
         }
 
-        // Extract tour from oscillator states
+        // Extract tour
         function getTour() {
             let tour = Array(n).fill(-1);
             for (let x = 0; x < n; x++) {
@@ -121,55 +123,71 @@
         }
 
         // Canvas setup
-        const canvas = document.getElementById('tspCanvas');
-        const ctx = canvas.getContext('2d');
+        const oscillatorCanvas = document.getElementById('oscillatorCanvas');
+        const oscillatorCtx = oscillatorCanvas.getContext('2d');
+        const tspCanvas = document.getElementById('tspCanvas');
+        const tspCtx = tspCanvas.getContext('2d');
 
-        // Draw function
+        // Draw oscillator network
+        function drawOscillators() {
+            const cellSize = oscillatorCanvas.width / n;
+            for (let i = 0; i < n; i++) {
+                for (let x = 0; x < n; x++) {
+                    const gray = Math.floor(V[i][x] * 255);
+                    oscillatorCtx.fillStyle = `rgb(${gray}, ${gray}, ${gray})`;
+                    oscillatorCtx.fillRect(x * cellSize, i * cellSize, cellSize, cellSize);
+                    oscillatorCtx.strokeStyle = 'black';
+                    oscillatorCtx.strokeRect(x * cellSize, i * cellSize, cellSize, cellSize);
+                }
+            }
+        }
+
+        // Draw TSP tour
         function drawTour(currentTour, iter) {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            tspCtx.clearRect(0, 0, tspCanvas.width, tspCanvas.height);
 
             // Draw cities
-            ctx.fillStyle = 'blue';
+            tspCtx.fillStyle = 'blue';
             for (let i = 0; i < n; i++) {
-                ctx.beginPath();
-                ctx.arc(cities[i][0], cities[i][1], 5, 0, 2 * Math.PI);
-                ctx.fill();
-                ctx.fillText(`City ${i}`, cities[i][0] + 10, cities[i][1]);
+                tspCtx.beginPath();
+                tspCtx.arc(cities[i][0], cities[i][1], 5, 0, 2 * Math.PI);
+                tspCtx.fill();
+                tspCtx.fillText(`City ${i}`, cities[i][0] + 10, cities[i][1]);
             }
 
             // Draw shortest tour (green)
             if (shortestTour) {
-                ctx.strokeStyle = 'green';
-                ctx.lineWidth = 2;
-                ctx.beginPath();
+                tspCtx.strokeStyle = 'green';
+                tspCtx.lineWidth = 2;
+                tspCtx.beginPath();
                 for (let x = 0; x < n; x++) {
                     const city = shortestTour[x];
                     if (x === 0) {
-                        ctx.moveTo(cities[city][0], cities[city][1]);
+                        tspCtx.moveTo(cities[city][0], cities[city][1]);
                     } else {
-                        ctx.lineTo(cities[city][0], cities[city][1]);
+                        tspCtx.lineTo(cities[city][0], cities[city][1]);
                     }
                 }
-                ctx.lineTo(cities[shortestTour[0]][0], cities[shortestTour[0]][1]);
-                ctx.stroke();
+                tspCtx.lineTo(cities[shortestTour[0]][0], cities[shortestTour[0]][1]);
+                tspCtx.stroke();
             }
 
             // Draw current tour (red)
-            ctx.strokeStyle = 'red';
-            ctx.lineWidth = 2;
-            ctx.beginPath();
+            tspCtx.strokeStyle = 'red';
+            tspCtx.lineWidth = 2;
+            tspCtx.beginPath();
             for (let x = 0; x < n; x++) {
                 const city = currentTour[x];
                 if (city !== -1) {
                     if (x === 0) {
-                        ctx.moveTo(cities[city][0], cities[city][1]);
+                        tspCtx.moveTo(cities[city][0], cities[city][1]);
                     } else {
-                        ctx.lineTo(cities[city][0], cities[city][1]);
+                        tspCtx.lineTo(cities[city][0], cities[city][1]);
                     }
                 }
             }
-            if (currentTour[0] !== -1) ctx.lineTo(cities[currentTour[0]][0], cities[currentTour[0]][1]);
-            ctx.stroke();
+            if (currentTour[0] !== -1) tspCtx.lineTo(cities[currentTour[0]][0], cities[currentTour[0]][1]);
+            tspCtx.stroke();
 
             // Update shortest tour and display
             let currentLength = 'N/A';
@@ -185,22 +203,27 @@
                 `Iteration: ${iter} | Current: ${currentTour.join(' -> ')} (${currentLength}) | Shortest: ${shortestTour ? shortestTour.join(' -> ') : 'N/A'} (${shortestTour ? shortestLength : 'N/A'})`;
         }
 
-        // Animation loop
+        // Animation loop with delay
         let iter = 0;
         function animate() {
             if (iter < maxIter && !updateOscillators()) {
                 const currentTour = getTour();
+                drawOscillators();
                 drawTour(currentTour, iter);
                 iter++;
-                requestAnimationFrame(animate);
+                console.log(`Iteration ${iter}`); // Debug to confirm animation
+                setTimeout(() => requestAnimationFrame(animate), 10); // 10ms delay for visibility
             } else {
                 const finalTour = getTour();
+                drawOscillators();
                 drawTour(finalTour, iter);
                 console.log("Converged at iteration:", iter);
             }
         }
 
         // Start animation
+        drawOscillators(); // Initial draw
+        drawTour(getTour(), iter); // Initial tour
         animate();
     </script>
 </body>
