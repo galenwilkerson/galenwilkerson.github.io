@@ -2,23 +2,38 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Oscillator TSP Solver</title>
+    <title>Oscillator TSP Solver with Animation</title>
     <style>
         canvas { border: 1px solid black; }
-        body { font-family: Arial, sans-serif; }
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        #description { max-width: 600px; margin-top: 20px; font-size: 14px; line-height: 1.5; }
     </style>
 </head>
 <body>
     <h1>TSP Solver with Oscillators</h1>
     <canvas id="tspCanvas" width="400" height="400"></canvas>
     <p id="result">Running...</p>
+    <div id="description">
+        <h2>What’s Happening?</h2>
+        <p>This webpage uses a network of oscillators to solve the Traveling Salesman Problem (TSP) for 6 cities. Here's how it works:</p>
+        <ol>
+            <li><strong>Initial Display:</strong> Six blue dots (cities) appear on the canvas at coordinates (50, 50), (150, 50), (200, 120), (180, 200), (80, 220), and (30, 150), labeled City 0 to City 5. Below, you see the iteration count, current tour, and length (initially "N/A" as oscillators start undecided).</li>
+            <li><strong>Animation Begins:</strong> The oscillator network starts iterating. Each oscillator represents whether a city is visited at a specific step. They "vibrate" between 0 and 1, guided by an energy function with constraints (one city per step, one step per city) and a goal to minimize tour length.</li>
+            <li><strong>Evolving Tour:</strong> Red lines connect cities as oscillators synchronize. Early on, the tour is partial or chaotic (e.g., 0 -> 2 -> -1 -> 4 -> -1 -> 1). As iterations progress (e.g., 50, 200, 500), it refines into a full tour like 0 -> 1 -> 2 -> 3 -> 4 -> 5. The text updates with each frame.</li>
+            <li><strong>Convergence:</strong> Around 500–1000 iterations, oscillators settle: each step assigns one city, forming a closed loop (e.g., length ~512 units). The animation stops, showing the final tour.</li>
+            <li><strong>Visual Intuition:</strong> The red lines "dance" as oscillators negotiate, settling into order like a physical system finding a low-energy state. This mimics how real oscillator hardware (e.g., coupled lasers) might solve TSP heuristically.</li>
+        </ol>
+        <p><em>Note:</em> This is an approximation, not guaranteed to find the optimal tour, but it shows the oscillator concept in action!</p>
+    </div>
     <script>
-        // TSP instance: 4 cities with (x, y) coordinates
+        // TSP instance: 6 cities with (x, y) coordinates
         const cities = [
-            [50, 50],   // City 0
-            [150, 50],  // City 1
-            [150, 150], // City 2
-            [50, 150]   // City 3
+            [50, 50],    // City 0
+            [150, 50],   // City 1
+            [200, 120],  // City 2
+            [180, 200],  // City 3
+            [80, 220],   // City 4
+            [30, 150]    // City 5
         ];
         const n = cities.length;
 
@@ -40,18 +55,17 @@
         const B = 500;  // Constraint penalty (each step has one city)
         const D = 50;   // Distance cost
         const dt = 0.01; // Time step
-        const maxIter = 1000; // Max iterations
+        const maxIter = 2000; // Max iterations
 
         // Energy update function
         function updateOscillators() {
             let dV = Array(n).fill().map(() => Array(n).fill(0));
             let converged = true;
 
-            // Compute energy gradients
             for (let i = 0; i < n; i++) {
                 for (let x = 0; x < n; x++) {
-                    let sumA = 0; // Row constraint (one city per step)
-                    let sumB = 0; // Column constraint (each step has one city)
+                    let sumA = 0; // Row constraint
+                    let sumB = 0; // Column constraint
                     let sumD = 0; // Distance term
 
                     // A: Sum over row (except x)
@@ -73,10 +87,10 @@
                         }
                     }
 
-                    // Update rule: dV/dt = -dE/dV
+                    // Update rule
                     dV[i][x] = -A * sumA - B * sumB - D * sumD;
                     let newV = V[i][x] + dt * dV[i][x];
-                    newV = Math.max(0, Math.min(1, newV)); // Clamp to [0,1]
+                    newV = Math.max(0, Math.min(1, newV));
                     if (Math.abs(newV - V[i][x]) > 0.001) converged = false;
                     V[i][x] = newV;
                 }
@@ -101,18 +115,12 @@
             return tour;
         }
 
-        // Run the simulation
-        function solveTSP() {
-            for (let iter = 0; iter < maxIter; iter++) {
-                if (updateOscillators()) break; // Converged
-            }
-            return getTour();
-        }
-
-        // Draw the result
+        // Canvas setup
         const canvas = document.getElementById('tspCanvas');
         const ctx = canvas.getContext('2d');
-        function drawTour(tour) {
+
+        // Draw function
+        function drawTour(tour, iter) {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
             // Draw cities
@@ -130,26 +138,46 @@
             ctx.beginPath();
             for (let x = 0; x < n; x++) {
                 const city = tour[x];
-                if (x === 0) {
-                    ctx.moveTo(cities[city][0], cities[city][1]);
-                } else {
-                    ctx.lineTo(cities[city][0], cities[city][1]);
+                if (city !== -1) {
+                    if (x === 0) {
+                        ctx.moveTo(cities[city][0], cities[city][1]);
+                    } else {
+                        ctx.lineTo(cities[city][0], cities[city][1]);
+                    }
                 }
             }
-            ctx.lineTo(cities[tour[0]][0], cities[tour[0]][1]); // Close the loop
+            if (tour[0] !== -1) ctx.lineTo(cities[tour[0]][0], cities[tour[0]][1]); // Close loop
             ctx.stroke();
 
-            // Calculate and display tour length
+            // Calculate tour length
             let length = 0;
-            for (let x = 0; x < n; x++) {
-                length += distances[tour[x]][tour[(x + 1) % n]];
+            let validTour = tour.every(city => city !== -1);
+            if (validTour) {
+                for (let x = 0; x < n; x++) {
+                    length += distances[tour[x]][tour[(x + 1) % n]];
+                }
             }
-            document.getElementById('result').textContent = `Tour: ${tour.join(' -> ')} | Length: ${length.toFixed(2)}`;
+            document.getElementById('result').textContent = 
+                `Iteration: ${iter} | Tour: ${tour.join(' -> ')} | Length: ${validTour ? length.toFixed(2) : 'N/A'}`;
         }
 
-        // Solve and display
-        const tour = solveTSP();
-        drawTour(tour);
+        // Animation loop
+        let iter = 0;
+        function animate() {
+            if (iter < maxIter && !updateOscillators()) {
+                const tour = getTour();
+                drawTour(tour, iter);
+                iter++;
+                requestAnimationFrame(animate);
+            } else {
+                const finalTour = getTour();
+                drawTour(finalTour, iter);
+                console.log("Converged at iteration:", iter);
+            }
+        }
+
+        // Start animation
+        animate();
     </script>
 </body>
 </html>
