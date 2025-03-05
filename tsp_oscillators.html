@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Oscillator TSP Solver</title>
+    <style>
+        canvas { border: 1px solid black; }
+        body { font-family: Arial, sans-serif; }
+    </style>
+</head>
+<body>
+    <h1>TSP Solver with Oscillators</h1>
+    <canvas id="tspCanvas" width="400" height="400"></canvas>
+    <p id="result">Running...</p>
+    <script>
+        // TSP instance: 4 cities with (x, y) coordinates
+        const cities = [
+            [50, 50],   // City 0
+            [150, 50],  // City 1
+            [150, 150], // City 2
+            [50, 150]   // City 3
+        ];
+        const n = cities.length;
+
+        // Distance matrix
+        const distances = Array(n).fill().map(() => Array(n).fill(0));
+        for (let i = 0; i < n; i++) {
+            for (let j = 0; j < n; j++) {
+                const dx = cities[i][0] - cities[j][0];
+                const dy = cities[i][1] - cities[j][1];
+                distances[i][j] = Math.sqrt(dx * dx + dy * dy);
+            }
+        }
+
+        // Oscillator network: n x n matrix (city i at step j)
+        let V = Array(n).fill().map(() => Array(n).fill(0.5)); // Initial state: neutral
+
+        // Parameters
+        const A = 500;  // Constraint penalty (one city per step)
+        const B = 500;  // Constraint penalty (each step has one city)
+        const D = 50;   // Distance cost
+        const dt = 0.01; // Time step
+        const maxIter = 1000; // Max iterations
+
+        // Energy update function
+        function updateOscillators() {
+            let dV = Array(n).fill().map(() => Array(n).fill(0));
+            let converged = true;
+
+            // Compute energy gradients
+            for (let i = 0; i < n; i++) {
+                for (let x = 0; x < n; x++) {
+                    let sumA = 0; // Row constraint (one city per step)
+                    let sumB = 0; // Column constraint (each step has one city)
+                    let sumD = 0; // Distance term
+
+                    // A: Sum over row (except x)
+                    for (let y = 0; y < n; y++) {
+                        if (y !== x) sumA += V[i][y];
+                    }
+
+                    // B: Sum over column (except i)
+                    for (let k = 0; k < n; k++) {
+                        if (k !== i) sumB += V[k][x];
+                    }
+
+                    // D: Distance to next city in tour
+                    for (let j = 0; j < n; j++) {
+                        for (let y = 0; y < n; y++) {
+                            if (y !== x) {
+                                sumD += distances[i][j] * V[i][x] * V[j][(x + 1) % n];
+                            }
+                        }
+                    }
+
+                    // Update rule: dV/dt = -dE/dV
+                    dV[i][x] = -A * sumA - B * sumB - D * sumD;
+                    let newV = V[i][x] + dt * dV[i][x];
+                    newV = Math.max(0, Math.min(1, newV)); // Clamp to [0,1]
+                    if (Math.abs(newV - V[i][x]) > 0.001) converged = false;
+                    V[i][x] = newV;
+                }
+            }
+            return converged;
+        }
+
+        // Extract tour from oscillator states
+        function getTour() {
+            let tour = Array(n).fill(-1);
+            for (let x = 0; x < n; x++) {
+                let maxVal = -1;
+                let maxI = -1;
+                for (let i = 0; i < n; i++) {
+                    if (V[i][x] > maxVal && tour.indexOf(i) === -1) {
+                        maxVal = V[i][x];
+                        maxI = i;
+                    }
+                }
+                if (maxI !== -1) tour[x] = maxI;
+            }
+            return tour;
+        }
+
+        // Run the simulation
+        function solveTSP() {
+            for (let iter = 0; iter < maxIter; iter++) {
+                if (updateOscillators()) break; // Converged
+            }
+            return getTour();
+        }
+
+        // Draw the result
+        const canvas = document.getElementById('tspCanvas');
+        const ctx = canvas.getContext('2d');
+        function drawTour(tour) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw cities
+            ctx.fillStyle = 'blue';
+            for (let i = 0; i < n; i++) {
+                ctx.beginPath();
+                ctx.arc(cities[i][0], cities[i][1], 5, 0, 2 * Math.PI);
+                ctx.fill();
+                ctx.fillText(`City ${i}`, cities[i][0] + 10, cities[i][1]);
+            }
+
+            // Draw tour
+            ctx.strokeStyle = 'red';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            for (let x = 0; x < n; x++) {
+                const city = tour[x];
+                if (x === 0) {
+                    ctx.moveTo(cities[city][0], cities[city][1]);
+                } else {
+                    ctx.lineTo(cities[city][0], cities[city][1]);
+                }
+            }
+            ctx.lineTo(cities[tour[0]][0], cities[tour[0]][1]); // Close the loop
+            ctx.stroke();
+
+            // Calculate and display tour length
+            let length = 0;
+            for (let x = 0; x < n; x++) {
+                length += distances[tour[x]][tour[(x + 1) % n]];
+            }
+            document.getElementById('result').textContent = `Tour: ${tour.join(' -> ')} | Length: ${length.toFixed(2)}`;
+        }
+
+        // Solve and display
+        const tour = solveTSP();
+        drawTour(tour);
+    </script>
+</body>
+</html>
