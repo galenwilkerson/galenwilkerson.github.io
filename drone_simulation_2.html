@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Drone Visualization</title>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        canvas { display: block; }
+        #controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(255, 255, 255, 0.8);
+            padding: 10px;
+            border-radius: 5px;
+        }
+        #controls label {
+            display: block;
+            margin: 5px 0;
+        }
+        #logo {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        #logo img {
+            width: 150px;
+            height: auto;
+        }
+        #logo p {
+            margin: 5px 0 0 0;
+            font-size: 12px;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div id="controls">
+        <label>Noise Amplitude: <input type="range" id="noiseAmp" min="0" max="1" step="0.01" value="0.5"></label>
+        <label>Field Frequency: <input type="range" id="frequency" min="5" max="20" step="0.1" value="10"></label>
+        <label>Drone Speed: <input type="range" id="droneSpeed" min="0.001" max="0.02" step="0.001" value="0.005"></label>
+        <label>Number of Bases: <input type="range" id="numBases" min="1" max="10" step="1" value="5"></label>
+        <label>Base Radius: <input type="range" id="baseRadius" min="0.05" max="0.2" step="0.01" value="0.1"></label>
+    </div>
+    <div id="logo">
+        <img src="logo.png" alt="Logo">
+    </div>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
+            }
+        }
+    </script>
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        class Visualization {
+            constructor() {
+                this.scene = new THREE.Scene();
+                this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+                this.renderer = new THREE.WebGLRenderer();
+                this.controls = null;
+                this.drones = [];
+                this.paths = [];
+                this.square = null;
+                this.bases = [];
+                this.params = {
+                    noiseAmp: 0.5,
+                    frequency: 10,
+                    droneSpeed: 0.005,
+                    numBases: 5,
+                    baseRadius: 0.1
+                };
+            }
+
+            init() {
+                // Set up renderer
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+                document.body.appendChild(this.renderer.domElement);
+
+                // Camera position
+                this.camera.position.set(1.5, 1.5, 1.5);
+                this.camera.lookAt(0, 0, 0);
+
+                // Orbit controls
+                this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+                this.controls.target.set(0.5, 0.5, 0);
+
+                // Create unit cube wireframe
+                const cubeGeometry = new THREE.BoxGeometry(1, 1, 1);
+                const edges = new THREE.EdgesGeometry(cubeGeometry);
+                const cube = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x000000 }));
+                cube.position.set(0.5, 0.5, 0.5);
+                this.scene.add(cube);
+
+                // Create static unit square
+                const squareGeometry = new THREE.PlaneGeometry(1, 1, 32, 32);
+                const squareMaterial = new THREE.MeshBasicMaterial({
+                    vertexColors: true,
+                    side: THREE.DoubleSide
+                });
+                this.square = new THREE.Mesh(squareGeometry, squareMaterial);
+                this.square.rotation.x = -Math.PI / 2;
+                this.square.position.set(0.5, 0, 0.5);
+                this.scene.add(this.square);
+                this.updateField();
+
+                // Create initial drone bases
+                this.updateBases();
+
+                // Set up sliders
+                document.getElementById('noiseAmp').addEventListener('input', (e) => {
+                    this.params.noiseAmp = parseFloat(e.target.value);
+                    this.updateField();
+                });
+                document.getElementById('frequency').addEventListener('input', (e) => {
+                    this.params.frequency = parseFloat(e.target.value);
+                    this.updateField();
+                });
+                document.getElementById('droneSpeed').addEventListener('input', (e) => {
+                    this.params.droneSpeed = parseFloat(e.target.value);
+                });
+                document.getElementById('numBases').addEventListener('input', (e) => {
+                    this.params.numBases = parseInt(e.target.value);
+                    this.updateBases();
+                });
+                document.getElementById('baseRadius').addEventListener('input', (e) => {
+                    this.params.baseRadius = parseFloat(e.target.value);
+                    this.updateBases();
+                });
+
+                // Handle window resize
+                window.addEventListener('resize', () => {
+                    this.camera.aspect = window.innerWidth / window.innerHeight;
+                    this.camera.updateProjectionMatrix();
+                    this.renderer.setSize(window.innerWidth, window.innerHeight);
+                });
+
+                // Start animation
+                this.animate();
+            }
+
+            updateField() {
+                const position = this.square.geometry.attributes.position;
+                const colors = [];
+
+                for (let i = 0; i < position.count; i++) {
+                    const x = position.getX(i);
+                    const z = position.getZ(i);
+                    
+                    // Increased variance with multiple frequencies and more noise
+                    const value = 0.5 + 0.5 * (
+                        0.4 * Math.sin(x * this.params.frequency) * Math.cos(z * this.params.frequency) +
+                        0.3 * Math.sin(x * this.params.frequency * 1.5) * Math.cos(z * this.params.frequency * 0.7) +
+                        0.2 * Math.sin(x * this.params.frequency * 0.5) +
+                        this.params.noiseAmp * (Math.random() - 0.5)
+                    );
+                    
+                    // Map to color (red to blue)
+                    const color = new THREE.Color().setHSL(value, 0.7, 0.5);
+                    colors.push(color.r, color.g, color.b);
+                }
+
+                this.square.geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+            }
+
+            updateBases() {
+                // Remove existing bases, paths, and drones
+                this.bases.forEach(base => this.scene.remove(base));
+                this.paths.forEach(path => this.scene.remove(path));
+                this.drones.forEach(drone => this.scene.remove(drone.mesh));
+                this.bases = [];
+                this.paths = [];
+                this.drones = [];
+
+                // Create new drone bases
+                for (let i = 0; i < this.params.numBases; i++) {
+                    const x = Math.random();
+                    const z = Math.random();
+                    const circleGeometry = new THREE.CircleGeometry(this.params.baseRadius, 32);
+                    const edges = new THREE.EdgesGeometry(circleGeometry);
+                    const circleMaterial = new THREE.LineBasicMaterial({ color: 0xff0000 });
+                    const circle = new THREE.LineSegments(edges, circleMaterial);
+                    circle.rotation.x = -Math.PI / 2;
+                    circle.position.set(x, 0.01, z);
+                    this.scene.add(circle);
+                    this.bases.push(circle);
+
+                    // Create drone path
+                    const path = this.createDronePath(x, z, this.params.baseRadius);
+                    this.paths.push(path);
+                    this.scene.add(path);
+
+                    // Create drone
+                    const droneGeometry = new THREE.SphereGeometry(0.01, 16, 16);
+                    const droneMaterial = new THREE.MeshBasicMaterial({ color: 0x0000ff });
+                    const drone = new THREE.Mesh(droneGeometry, droneMaterial);
+                    drone.position.set(x, 0.01, z);
+                    this.drones.push({ mesh: drone, path: path, t: Math.random() });
+                    this.scene.add(drone);
+                }
+            }
+
+            createDronePath(baseX, baseZ, radius) {
+                const points = [];
+                const segments = 100;
+                const height = 1;
+                const loops = 2;
+
+                for (let i = 0; i <= segments; i++) {
+                    const t = i / segments;
+                    const theta = t * Math.PI * 2 * loops;
+                    const r = radius * (1 - t);
+                    const x = baseX + r * Math.cos(theta);
+                    const y = t * height;
+                    const z = baseZ + r * Math.sin(theta);
+                    points.push(new THREE.Vector3(x, y, z));
+                }
+                points.push(new THREE.Vector3(baseX, 0, baseZ));
+
+                const curve = new THREE.CatmullRomCurve3(points);
+                const geometry = new THREE.BufferGeometry().setFromPoints(curve.getPoints(100));
+                const material = new THREE.LineBasicMaterial({ color: 0x00ff00 });
+                return new THREE.Line(geometry, material);
+            }
+
+            updateDrones() {
+                this.drones.forEach(drone => {
+                    drone.t += this.params.droneSpeed;
+                    if (drone.t > 1) drone.t = 0;
+                    
+                    const point = drone.path.geometry.attributes.position.array;
+                    const index = Math.floor(drone.t * (point.length / 3));
+                    if (index < point.length / 3) {
+                        drone.mesh.position.set(
+                            point[index * 3],
+                            point[index * 3 + 1],
+                            point[index * 3 + 2]
+                        );
+                    }
+                });
+            }
+
+            animate() {
+                requestAnimationFrame(() => this.animate());
+                this.updateDrones();
+                this.renderer.render(this.scene, this.camera);
+            }
+
+            main() {
+                this.init();
+            }
+        }
+
+        const viz = new Visualization();
+        viz.main();
+    </script>
+</body>
+</html>
