@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Drones & Paths</title>
+<title>3-Drones with 3-D Paths</title>
 <style>
   body{margin:0;overflow:hidden;background:#000;font-family:sans-serif}
   #ui{position:fixed;top:10px;left:10px;z-index:10;color:#fff}
@@ -13,34 +13,30 @@
 <div id="ui">
   <label># drones&nbsp;
     <input id="droneCount" type="range" min="3" max="10" value="5">
-  </label><span id="countLbl">5</span>&nbsp;&nbsp;
-  <p>
-  <label>drone radius&nbsp;
-    <input id="dotSize" type="range" min="0.1" max="1.0" value="0.3" step="0.05">
-  </label><span id="radLbl">0.3</span>
+  </label><span id="cntLbl">5</span>&nbsp;&nbsp;
+  <label>drone radius&nbsp;<!-- ring radius -->
+    <input id="ringRad" type="range" min="2" max="8" value="4" step="0.2">
+  </label><span id="radLbl">4.0</span>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
 <script>
-/* ------------------------------------------------------------------ */
-/*  CONSTANTS (edit here if desired)                                  */
-/* ------------------------------------------------------------------ */
-const GROUND_TEXTURE  = 'ground_2.png';   // same-dir texture
-const BOX_SIZE        = 20;               // floor width/depth
-const BOX_HEIGHT      = 10;               // fly ceiling
-const BRIGHTEN_ALPHA  = 0.30;             // brighten ground (0–1)
-/*const STATION_RADIUS  = 4;                // red ring radius */
-let STATION_RADIUS = = parseFloat(document.getElementById('dotSize').value);
-const HOR_SPEED_MAX   = 0.06;             // horizontal speed cap
-const VER_SPEED_MAX   = 0.04;             // vertical speed cap
-const PATH_MAX_POINTS = 300;              // verts stored per path
-/* DRONE_DOT_RAD gets its default from the slider on load            */
-/*let DRONE_DOT_RAD = parseFloat(document.getElementById('dotSize').value);*/
-const DRONT_DOT_RAD = 0.3;  // SIZE OF DRONE DOT
+/* --------------------------------------------------------------- */
+/*  CONSTANTS (edit if wanted)                                     */
+/* --------------------------------------------------------------- */
+const GROUND_TEXTURE   = 'ground_2.png';      // same-dir ground texture
+const BOX_SIZE         = 20;                  // floor width/depth
+const BOX_HEIGHT       = 10;                  // fly ceiling height
+const BRIGHTEN_ALPHA   = 0.3;                 // brighten ground 0–1
+const HOR_SPEED_MAX    = 0.06;                // horizontal speed cap
+const VER_SPEED_MAX    = 0.04;                // vertical speed cap
+const PATH_MAX_POINTS  = 400;                 // verts stored / drone
+const DRONE_DOT_RADIUS = 0.3;                 // visual sphere size
+/* ring radius is set by slider at runtime                         */
 
-/* ------------------------------------------------------------------ */
-/*  THREE BASICS                                                      */
-/* ------------------------------------------------------------------ */
+/* --------------------------------------------------------------- */
+/*  THREE BASICS                                                   */
+/* --------------------------------------------------------------- */
 const renderer = new THREE.WebGLRenderer({antialias:true});
 renderer.setPixelRatio(devicePixelRatio);
 renderer.setSize(innerWidth,innerHeight);
@@ -54,157 +50,163 @@ const camera = new THREE.PerspectiveCamera(50,innerWidth/innerHeight,0.1,1000);
 camera.position.set(25,18,25);
 camera.lookAt(0,0,0);
 
-/* ------------------------------------------------------------------ */
-/*  GROUND ONLY (walls omitted → completely invisible)                */
-/* ------------------------------------------------------------------ */
+/* --------------------------------------------------------------- */
+/*  GROUND (walls omitted → invisible box)                         */
+/* --------------------------------------------------------------- */
 new THREE.TextureLoader().load(GROUND_TEXTURE,tex=>{
-  brightenTexture(tex);
+  brighten(tex);
   const ground = new THREE.Mesh(
     new THREE.PlaneGeometry(BOX_SIZE,BOX_SIZE),
     new THREE.MeshBasicMaterial({map:tex})
   );
   ground.rotation.x = -Math.PI/2;
   scene.add(ground);
-  init();                   // once texture ready
+  init();                                         // start once texture is ready
 });
 
-/* brighten helper */
-function brightenTexture(tex){
-  const img=tex.image,c=document.createElement('canvas');
-  c.width=img.width;c.height=img.height;
-  const ctx=c.getContext('2d');ctx.drawImage(img,0,0);
-  ctx.fillStyle=`rgba(255,255,255,${BRIGHTEN_ALPHA})`;
+function brighten(tex){
+  const img = tex.image, c = document.createElement('canvas');
+  c.width = img.width; c.height = img.height;
+  const ctx = c.getContext('2d');
+  ctx.drawImage(img,0,0);
+  ctx.fillStyle = `rgba(255,255,255,${BRIGHTEN_ALPHA})`;
   ctx.fillRect(0,0,c.width,c.height);
-  tex.image=c;tex.needsUpdate=true;tex.encoding=THREE.sRGBEncoding;
+  tex.image = c; tex.needsUpdate = true; tex.encoding = THREE.sRGBEncoding;
 }
 
-/* ------------------------------------------------------------------ */
-/*  UI SLIDERS                                                        */
-/* ------------------------------------------------------------------ */
-const sliderCnt  = document.getElementById('droneCount');
-const sliderRad  = document.getElementById('dotSize');
-const lblCnt     = document.getElementById('countLbl');
-const lblRad     = document.getElementById('radLbl');
-sliderCnt.oninput = ()=>{lblCnt.textContent=sliderCnt.value;resetDrones(+sliderCnt.value);};
+/* --------------------------------------------------------------- */
+/*  UI HANDLERS                                                    */
+/* --------------------------------------------------------------- */
+const sliderCnt = document.getElementById('droneCount');
+const sliderRad = document.getElementById('ringRad');
+const lblCnt    = document.getElementById('cntLbl');
+const lblRad    = document.getElementById('radLbl');
+
+sliderCnt.oninput = ()=>{
+  lblCnt.textContent = sliderCnt.value;
+  resetDrones(+sliderCnt.value, parseFloat(sliderRad.value));
+};
 sliderRad.oninput = ()=>{
-  DRONE_DOT_RAD=parseFloat(sliderRad.value);
-  lblRad.textContent=DRONE_DOT_RAD.toFixed(2);
-  resetDrones(+sliderCnt.value);          // rebuild drones with new size
+  lblRad.textContent = parseFloat(sliderRad.value).toFixed(1);
+  resetDrones(+sliderCnt.value, parseFloat(sliderRad.value));
 };
 
-/* ------------------------------------------------------------------ */
-/*  DRONES & PATHS                                                    */
-/* ------------------------------------------------------------------ */
+/* --------------------------------------------------------------- */
+/*  DRONES + PATHS                                                 */
+/* --------------------------------------------------------------- */
 const dronesGroup = new THREE.Group(); scene.add(dronesGroup);
-let drones=[];                            // {mesh,base,vx,vy,vz,line,positions,idx}
+let drones = [];                           // {mesh,base,vx,vy,vz,radius,line,positions,idx}
 
-function ringMesh(){
-  const g=new THREE.RingGeometry(STATION_RADIUS*0.97,STATION_RADIUS,64);
+function makeRing(radius){
+  const g = new THREE.RingGeometry(radius*0.97, radius, 64);
   g.rotateX(-Math.PI/2);
   return new THREE.Mesh(
-    g,new THREE.MeshBasicMaterial({color:0xff0000,side:THREE.DoubleSide})
+    g, new THREE.MeshBasicMaterial({color:0xff0000, side:THREE.DoubleSide})
   );
 }
-function droneMesh(){
+function makeDroneDot(){
   return new THREE.Mesh(
-    new THREE.SphereGeometry(DRONE_DOT_RAD,8,8),
+    new THREE.SphereGeometry(DRONE_DOT_RADIUS,8,8),
     new THREE.MeshBasicMaterial({color:0xff0000})
   );
 }
-function pathLine(){
-  const positions=new Float32Array(PATH_MAX_POINTS*3);
-  const geo=new THREE.BufferGeometry();
-  geo.setAttribute('position',new THREE.BufferAttribute(positions,3));
+function makePath(){
+  const positions = new Float32Array(PATH_MAX_POINTS*3);
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(positions,3));
   geo.setDrawRange(0,0);
-  const mat=new THREE.LineBasicMaterial({color:0x00ff00});
-  const line=new THREE.Line(geo,mat);
+  const line = new THREE.Line(geo, new THREE.LineBasicMaterial({color:0x00ff00}));
   scene.add(line);
-  return {line,positions,geo,idx:0};
+  return {positions,geo,line,idx:0};
 }
 
-function resetDrones(n){
+function resetDrones(n, ringRadius){
   dronesGroup.clear();
-  /* remove old rings/lines */
-  scene.children=scene.children.filter(obj=>{
-    return !(obj.geometry&&(
-      obj.geometry.type==='RingGeometry'||obj.isLine)
-    );
-  });
-  drones=[];
-  const half=BOX_SIZE/2-STATION_RADIUS;
+  /* remove old rings & path lines */
+  scene.children = scene.children.filter(o=>!(o.geometry&&(o.geometry.type==='RingGeometry'||o.isLine)));
+
+  drones = [];
+  const half = BOX_SIZE/2 - ringRadius;
+
   for(let i=0;i<n;i++){
-    const ring=ringMesh();
+    /* ground station */
+    const ring = makeRing(ringRadius);
     ring.position.set(
-      THREE.MathUtils.randFloat(-half,half),0.02,
+      THREE.MathUtils.randFloat(-half,half), 0.02,
       THREE.MathUtils.randFloat(-half,half)
     );
     scene.add(ring);
 
-    const dot=droneMesh();
-    dot.position.copy(ring.position);dot.position.y=2;
-    dronesGroup.add(dot);
+    /* drone */
+    const drone = makeDroneDot();
+    drone.position.copy(ring.position);
+    drone.position.y = 2;               // start above ground
+    dronesGroup.add(drone);
 
-    const path=pathLine();
+    /* path */
+    const pth = makePath();
+
     drones.push({
-      mesh:dot,
-      base:ring.position.clone(),
-      vx:(Math.random()*2-1)*HOR_SPEED_MAX,
-      vy:(Math.random()*2-1)*VER_SPEED_MAX,
-      vz:(Math.random()*2-1)*HOR_SPEED_MAX,
-      positions:path.positions,
-      geo:path.geo,
-      line:path.line,
-      idx:0
+      mesh: drone,
+      base: ring.position.clone(),
+      radius: ringRadius,
+      vx: (Math.random()*2-1)*HOR_SPEED_MAX,
+      vy: (Math.random()*2-1)*VER_SPEED_MAX,
+      vz: (Math.random()*2-1)*HOR_SPEED_MAX,
+      positions: pth.positions,
+      geo: pth.geo,
+      idx: 0
     });
   }
 }
 
-function updatePaths(d){
-  const posAttr=d.geo.attributes.position;
-  const i=d.idx%PATH_MAX_POINTS;
-  d.positions[i*3  ]=d.mesh.position.x;
-  d.positions[i*3+1]=d.mesh.position.y;
-  d.positions[i*3+2]=d.mesh.position.z;
+function updatePath(d){
+  const i = d.idx % PATH_MAX_POINTS;
+  d.positions[i*3  ] = d.mesh.position.x;
+  d.positions[i*3+1] = d.mesh.position.y;
+  d.positions[i*3+2] = d.mesh.position.z;
   d.idx++;
-  posAttr.needsUpdate=true;
-  d.geo.setDrawRange(0,Math.min(d.idx,PATH_MAX_POINTS));
+  d.geo.attributes.position.needsUpdate = true;
+  d.geo.setDrawRange(0, Math.min(d.idx, PATH_MAX_POINTS));
 }
 
-/* ------------------------------------------------------------------ */
-/*  SIM UPDATE                                                        */
-/* ------------------------------------------------------------------ */
 function advanceDrone(d){
-  const p=d.mesh.position;
-  p.x+=d.vx; p.y+=d.vy; p.z+=d.vz;
-  /* vertical */
-  if(p.y<0.5||p.y>BOX_HEIGHT-0.5) d.vy*=-1;
-  /* horizontal circle */
-  const dx=p.x-d.base.x,dz=p.z-d.base.z;
-  if(dx*dx+dz*dz>STATION_RADIUS*STATION_RADIUS){
-    d.vx*=-1; d.vz*=-1;
-    p.x+=d.vx; p.z+=d.vz;
+  const p = d.mesh.position;
+  p.x += d.vx; p.y += d.vy; p.z += d.vz;
+
+  /* vertical ceiling/floor */
+  if(p.y < 0.5 || p.y > BOX_HEIGHT-0.5) d.vy *= -1;
+
+  /* ring boundary in X-Z */
+  const dx = p.x - d.base.x, dz = p.z - d.base.z;
+  if(dx*dx + dz*dz > d.radius*d.radius){
+    d.vx *= -1; d.vz *= -1;
+    p.x += d.vx; p.z += d.vz;
   }
-  updatePaths(d);
+  updatePath(d);
 }
 
-/* ------------------------------------------------------------------ */
-/*  INIT & MAIN LOOP                                                  */
-/* ------------------------------------------------------------------ */
+/* --------------------------------------------------------------- */
+/*  MAIN LOOP                                                      */
+/* --------------------------------------------------------------- */
 function init(){
-  resetDrones(+sliderCnt.value);
+  lblRad.textContent = parseFloat(sliderRad.value).toFixed(1);
+  lblCnt.textContent = sliderCnt.value;
+  resetDrones(+sliderCnt.value, parseFloat(sliderRad.value));
   animate();
 }
+
 function animate(){
   requestAnimationFrame(animate);
   drones.forEach(advanceDrone);
   renderer.render(scene,camera);
 }
 
-/* ------------------------------------------------------------------ */
-/*  RESIZE                                                            */
-/* ------------------------------------------------------------------ */
+/* --------------------------------------------------------------- */
+/*  RESIZE                                                         */
+/* --------------------------------------------------------------- */
 addEventListener('resize',()=>{
-  camera.aspect=innerWidth/innerHeight;
+  camera.aspect = innerWidth/innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth,innerHeight);
 });
