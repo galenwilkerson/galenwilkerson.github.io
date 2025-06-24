@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Drones on Ground 2</title>
+<style>
+  body { margin:0; overflow:hidden; background:#000; }
+  #ui  { position:fixed; top:10px; left:10px; color:#fff; font:14px sans-serif; z-index:10; }
+  canvas { display:block; filter:brightness(1.25); }   /* brighten base image */
+</style>
+</head>
+<body>
+<div id="ui">
+  <label># drones:
+    <input id="droneSlider" type="range" min="3" max="10" value="5">
+  </label>
+  <span id="count">5</span>
+</div>
+
+<canvas id="canvas"></canvas>
+<script>
+const IMG_SRC = "ground_2.png";          // keep in same directory
+const RADIUS  = 20;                      // horizontal radius drawn in px
+
+const cvs   = document.getElementById("canvas");
+const ctx   = cvs.getContext("2d");
+const slide = document.getElementById("droneSlider");
+const count = document.getElementById("count");
+
+let drones = [];            // {x,y,vx,vy}
+function resize() {
+  cvs.width  = innerWidth;
+  cvs.height = innerHeight;
+}
+onresize = resize; resize();
+
+/* ---------- load ground texture ---------- */
+const ground = new Image();
+ground.src   = IMG_SRC;
+ground.onload = () => { resetDrones(+slide.value); requestAnimationFrame(loop); };
+
+/* ---------- slider ---------- */
+slide.oninput = () => { resetDrones(+slide.value); count.textContent = slide.value; };
+
+/* ---------- helpers ---------- */
+function resetDrones(n) {
+  drones = Array.from({length:n}, () => ({
+    x : Math.random()*cvs.width,
+    y : Math.random()*cvs.height*0.6,     // keep mostly above bottom strip
+    vx: (Math.random()*2-1)*1.2,
+    vy: (Math.random()*2-1)*1.2
+  }));
+}
+
+/* ---------- animation loop ---------- */
+function loop() {
+  requestAnimationFrame(loop);
+  ctx.clearRect(0,0,cvs.width,cvs.height);
+
+  /* draw ground on lower edge */
+  const h = ground.height, y0 = cvs.height - h;
+  ctx.drawImage(ground, 0, y0);
+
+  /* update & draw drones */
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = "red";
+  ctx.fillStyle   = "#fff";
+  drones.forEach(d => {
+    /* physics */
+    d.x += d.vx; d.y += d.vy;
+    if (d.x < RADIUS || d.x > cvs.width  - RADIUS) d.vx *= -1;
+    if (d.y < RADIUS || d.y > cvs.height - RADIUS) d.vy *= -1;
+
+    /* red horizontal-radius circle */
+    ctx.beginPath();
+    ctx.arc(d.x, d.y, RADIUS, 0, Math.PI*2);
+    ctx.stroke();
+
+    /* small dot for drone body */
+    ctx.beginPath();
+    ctx.arc(d.x, d.y, 4, 0, Math.PI*2);
+    ctx.fill();
+  });
+}
+</script>
+</body>
+</html>
