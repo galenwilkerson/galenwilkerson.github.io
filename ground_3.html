@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>3-Drones with 3-D Paths</title>
+<title>3-Drones (no paths)</title>
 <style>
   body{margin:0;overflow:hidden;background:#000;font-family:sans-serif}
   #ui{position:fixed;top:10px;left:10px;z-index:10;color:#fff}
@@ -15,7 +15,7 @@
     <input id="droneCount" type="range" min="3" max="10" value="5">
   </label><span id="cntLbl">5</span>&nbsp;&nbsp;
   <p>
-  <label>drone radius&nbsp;<!-- ring radius -->
+  <label>drone radius&nbsp;
     <input id="ringRad" type="range" min="2" max="8" value="4" step="0.2">
   </label><span id="radLbl">4.0</span>
 </div>
@@ -23,17 +23,15 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
 <script>
 /* --------------------------------------------------------------- */
-/*  CONSTANTS (edit if wanted)                                     */
+/*  CONSTANTS                                                      */
 /* --------------------------------------------------------------- */
-const GROUND_TEXTURE   = 'ground_2.png';      // same-dir ground texture
-const BOX_SIZE         = 20;                  // floor width/depth
-const BOX_HEIGHT       = 10;                  // fly ceiling height
-const BRIGHTEN_ALPHA   = 0.3;                 // brighten ground 0–1
-const HOR_SPEED_MAX    = 0.06;                // horizontal speed cap
-const VER_SPEED_MAX    = 0.04;                // vertical speed cap
-const PATH_MAX_POINTS  = 400;                 // verts stored / drone
-const DRONE_DOT_RADIUS = 0.3;                 // visual sphere size
-/* ring radius is set by slider at runtime                         */
+const GROUND_TEXTURE  = 'ground_2.png';      // texture in same folder
+const BOX_SIZE        = 20;
+const BOX_HEIGHT      = 10;
+const BRIGHTEN_ALPHA  = 0.3;
+const HOR_SPEED_MAX   = 0.06;
+const VER_SPEED_MAX   = 0.04;
+const DRONE_DOT_RADIUS= 0.3;                 // size of red drone sphere
 
 /* --------------------------------------------------------------- */
 /*  THREE BASICS                                                   */
@@ -52,27 +50,30 @@ camera.position.set(25,18,25);
 camera.lookAt(0,0,0);
 
 /* --------------------------------------------------------------- */
-/*  GROUND (walls omitted → invisible box)                         */
+/*  GROUND                                                         */
 /* --------------------------------------------------------------- */
-new THREE.TextureLoader().load(GROUND_TEXTURE,tex=>{
+new THREE.TextureLoader().load(GROUND_TEXTURE, tex => {
   brighten(tex);
   const ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(BOX_SIZE,BOX_SIZE),
-    new THREE.MeshBasicMaterial({map:tex})
+    new THREE.PlaneGeometry(BOX_SIZE, BOX_SIZE),
+    new THREE.MeshBasicMaterial({map: tex})
   );
   ground.rotation.x = -Math.PI/2;
   scene.add(ground);
-  init();                                         // start once texture is ready
+  init();                        // start once texture ready
 });
 
 function brighten(tex){
-  const img = tex.image, c = document.createElement('canvas');
+  const img = tex.image;
+  const c   = document.createElement('canvas');
   c.width = img.width; c.height = img.height;
   const ctx = c.getContext('2d');
   ctx.drawImage(img,0,0);
   ctx.fillStyle = `rgba(255,255,255,${BRIGHTEN_ALPHA})`;
   ctx.fillRect(0,0,c.width,c.height);
-  tex.image = c; tex.needsUpdate = true; tex.encoding = THREE.sRGBEncoding;
+  tex.image = c;
+  tex.needsUpdate = true;
+  tex.encoding = THREE.sRGBEncoding;
 }
 
 /* --------------------------------------------------------------- */
@@ -83,20 +84,20 @@ const sliderRad = document.getElementById('ringRad');
 const lblCnt    = document.getElementById('cntLbl');
 const lblRad    = document.getElementById('radLbl');
 
-sliderCnt.oninput = ()=>{
+sliderCnt.oninput = () => {
   lblCnt.textContent = sliderCnt.value;
   resetDrones(+sliderCnt.value, parseFloat(sliderRad.value));
 };
-sliderRad.oninput = ()=>{
+sliderRad.oninput = () => {
   lblRad.textContent = parseFloat(sliderRad.value).toFixed(1);
   resetDrones(+sliderCnt.value, parseFloat(sliderRad.value));
 };
 
 /* --------------------------------------------------------------- */
-/*  DRONES + PATHS                                                 */
+/*  DRONES                                                         */
 /* --------------------------------------------------------------- */
 const dronesGroup = new THREE.Group(); scene.add(dronesGroup);
-let drones = [];                           // {mesh,base,vx,vy,vz,radius,line,positions,idx}
+let drones = [];   // {mesh, base, radius, vx, vy, vz}
 
 function makeRing(radius){
   const g = new THREE.RingGeometry(radius*0.97, radius, 64);
@@ -107,84 +108,60 @@ function makeRing(radius){
 }
 function makeDroneDot(){
   return new THREE.Mesh(
-    new THREE.SphereGeometry(DRONE_DOT_RADIUS,8,8),
+    new THREE.SphereGeometry(DRONE_DOT_RADIUS, 8, 8),
     new THREE.MeshBasicMaterial({color:0xff0000})
   );
-}
-function makePath(){
-  const positions = new Float32Array(PATH_MAX_POINTS*3);
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(positions,3));
-  geo.setDrawRange(0,0);
-  const line = new THREE.Line(geo, new THREE.LineBasicMaterial({color:0x00ff00}));
-  scene.add(line);
-  return {positions,geo,line,idx:0};
 }
 
 function resetDrones(n, ringRadius){
   dronesGroup.clear();
-  /* remove old rings & path lines */
-  scene.children = scene.children.filter(o=>!(o.geometry&&(o.geometry.type==='RingGeometry'||o.isLine)));
+  /* remove old rings */
+  scene.children = scene.children.filter(
+    o => !(o.geometry && o.geometry.type === 'RingGeometry')
+  );
 
   drones = [];
   const half = BOX_SIZE/2 - ringRadius;
 
-  for(let i=0;i<n;i++){
-    /* ground station */
+  for(let i = 0; i < n; i++){
+    /* ground station ring */
     const ring = makeRing(ringRadius);
     ring.position.set(
-      THREE.MathUtils.randFloat(-half,half), 0.02,
-      THREE.MathUtils.randFloat(-half,half)
+      THREE.MathUtils.randFloat(-half, half), 0.02,
+      THREE.MathUtils.randFloat(-half, half)
     );
     scene.add(ring);
 
     /* drone */
     const drone = makeDroneDot();
     drone.position.copy(ring.position);
-    drone.position.y = 2;               // start above ground
+    drone.position.y = 2;
     dronesGroup.add(drone);
-
-    /* path */
-    const pth = makePath();
 
     drones.push({
       mesh: drone,
       base: ring.position.clone(),
       radius: ringRadius,
-      vx: (Math.random()*2-1)*HOR_SPEED_MAX,
-      vy: (Math.random()*2-1)*VER_SPEED_MAX,
-      vz: (Math.random()*2-1)*HOR_SPEED_MAX,
-      positions: pth.positions,
-      geo: pth.geo,
-      idx: 0
+      vx: (Math.random()*2 - 1) * HOR_SPEED_MAX,
+      vy: (Math.random()*2 - 1) * VER_SPEED_MAX,
+      vz: (Math.random()*2 - 1) * HOR_SPEED_MAX
     });
   }
-}
-
-function updatePath(d){
-  const i = d.idx % PATH_MAX_POINTS;
-  d.positions[i*3  ] = d.mesh.position.x;
-  d.positions[i*3+1] = d.mesh.position.y;
-  d.positions[i*3+2] = d.mesh.position.z;
-  d.idx++;
-  d.geo.attributes.position.needsUpdate = true;
-  d.geo.setDrawRange(0, Math.min(d.idx, PATH_MAX_POINTS));
 }
 
 function advanceDrone(d){
   const p = d.mesh.position;
   p.x += d.vx; p.y += d.vy; p.z += d.vz;
 
-  /* vertical ceiling/floor */
-  if(p.y < 0.5 || p.y > BOX_HEIGHT-0.5) d.vy *= -1;
+  /* vertical limits */
+  if(p.y < 0.5 || p.y > BOX_HEIGHT - 0.5) d.vy *= -1;
 
-  /* ring boundary in X-Z */
+  /* stay within ring in X-Z */
   const dx = p.x - d.base.x, dz = p.z - d.base.z;
-  if(dx*dx + dz*dz > d.radius*d.radius){
+  if(dx*dx + dz*dz > d.radius * d.radius){
     d.vx *= -1; d.vz *= -1;
     p.x += d.vx; p.z += d.vz;
   }
-  updatePath(d);
 }
 
 /* --------------------------------------------------------------- */
@@ -200,16 +177,16 @@ function init(){
 function animate(){
   requestAnimationFrame(animate);
   drones.forEach(advanceDrone);
-  renderer.render(scene,camera);
+  renderer.render(scene, camera);
 }
 
 /* --------------------------------------------------------------- */
 /*  RESIZE                                                         */
 /* --------------------------------------------------------------- */
-addEventListener('resize',()=>{
-  camera.aspect = innerWidth/innerHeight;
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth,innerHeight);
+  renderer.setSize(innerWidth, innerHeight);
 });
 </script>
 </body>
