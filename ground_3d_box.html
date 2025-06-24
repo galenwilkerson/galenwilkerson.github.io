@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>3D Ground with Drones</title>
+  <style>
+    body { margin: 0; overflow: hidden; }
+    canvas { display: block; }
+  </style>
+</head>
+<body>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.160.1/examples/js/controls/OrbitControls.min.js"></script>
+  <script>
+    // Scene, Camera, Renderer
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 100);
+    camera.position.set(1.5, 1.5, 1.5);
+    camera.lookAt(0.5, 0, 0.5);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    // Controls
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.target.set(0.5, 0, 0.5);
+    controls.update();
+
+    // Lighting
+    const light = new THREE.DirectionalLight(0xffffff, 1);
+    light.position.set(2, 4, 3);
+    scene.add(light);
+
+    // Ground texture
+    const loader = new THREE.TextureLoader();
+    loader.load('ground_2.png', function(texture) {
+      const geometry = new THREE.PlaneGeometry(1, 1);
+      const material = new THREE.MeshLambertMaterial({ map: texture, side: THREE.DoubleSide });
+      const plane = new THREE.Mesh(geometry, material);
+      plane.rotation.x = -Math.PI / 2;
+      plane.position.set(0.5, 0, 0.5);
+      scene.add(plane);
+    });
+
+    // Unit cube wireframe
+    const cubeGeometry = new THREE.BoxGeometry(1, 1, 1);
+    const edges = new THREE.EdgesGeometry(cubeGeometry);
+    const cube = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x000000 }));
+    cube.position.set(0.5, 0.5, 0.5);
+    scene.add(cube);
+
+    // Drones and paths
+    const numDrones = 5;
+    const baseRadius = 0.1;
+    const drones = [];
+    const paths = [];
+
+    for (let i = 0; i < numDrones; i++) {
+      const x = Math.random();
+      const z = Math.random();
+
+      const circleGeometry = new THREE.CircleGeometry(baseRadius, 32);
+      const baseEdges = new THREE.EdgesGeometry(circleGeometry);
+      const circle = new THREE.LineSegments(baseEdges, new THREE.LineBasicMaterial({ color: 0xff0000 }));
+      circle.rotation.x = -Math.PI / 2;
+      circle.position.set(x, 0.01, z);
+      scene.add(circle);
+
+      const points = [];
+      const segments = 100;
+      const height = 1;
+      const loops = 2;
+
+      for (let j = 0; j <= segments; j++) {
+        const t = j / segments;
+        const theta = t * Math.PI * 2 * loops;
+        const r = baseRadius * (1 - t);
+        points.push(new THREE.Vector3(
+          x + r * Math.cos(theta),
+          t * height,
+          z + r * Math.sin(theta)
+        ));
+      }
+      points.push(new THREE.Vector3(x, 0, z));
+
+      const curve = new THREE.CatmullRomCurve3(points);
+      const pathGeometry = new THREE.BufferGeometry().setFromPoints(curve.getPoints(100));
+      const path = new THREE.Line(pathGeometry, new THREE.LineBasicMaterial({ color: 0x00ff00 }));
+      scene.add(path);
+      paths.push(path);
+
+      const droneGeometry = new THREE.SphereGeometry(0.01, 16, 16);
+      const droneMaterial = new THREE.MeshBasicMaterial({ color: 0x0000ff });
+      const drone = new THREE.Mesh(droneGeometry, droneMaterial);
+      drone.position.set(x, 0.01, z);
+      scene.add(drone);
+      drones.push({ mesh: drone, path: curve, t: Math.random() });
+    }
+
+    // Animate
+    function animate() {
+      requestAnimationFrame(animate);
+      drones.forEach(drone => {
+        drone.t += 0.005;
+        if (drone.t > 1) drone.t = 0;
+        const pos = drone.path.getPoint(drone.t);
+        drone.mesh.position.set(pos.x, pos.y, pos.z);
+      });
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    // Resize handler
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>
+
