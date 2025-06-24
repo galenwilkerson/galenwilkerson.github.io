@@ -29,12 +29,14 @@ const GROUND_TEXTURE  = 'ground_2.png';   // same-dir texture
 const BOX_SIZE        = 20;               // floor width/depth
 const BOX_HEIGHT      = 10;               // fly ceiling
 const BRIGHTEN_ALPHA  = 0.30;             // brighten ground (0–1)
-const STATION_RADIUS  = 4;                // red ring radius
+/*const STATION_RADIUS  = 4;                // red ring radius */
+let STATION_RADIUS = = parseFloat(document.getElementById('dotSize').value);
 const HOR_SPEED_MAX   = 0.06;             // horizontal speed cap
 const VER_SPEED_MAX   = 0.04;             // vertical speed cap
 const PATH_MAX_POINTS = 300;              // verts stored per path
 /* DRONE_DOT_RAD gets its default from the slider on load            */
-let DRONE_DOT_RAD = parseFloat(document.getElementById('dotSize').value);
+/*let DRONE_DOT_RAD = parseFloat(document.getElementById('dotSize').value);*/
+const DRONT_DOT_RAD = 0.3;  // SIZE OF DRONE DOT
 
 /* ------------------------------------------------------------------ */
 /*  THREE BASICS                                                      */
