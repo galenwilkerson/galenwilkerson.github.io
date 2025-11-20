@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Two Subsystems, Phase-Space Entropy & Interaction Network</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      background: #111;
+      color: #eee;
+      margin: 0;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    #controls {
+      margin-bottom: 8px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 12px;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+    }
+    button {
+      margin: 2px 0;
+      padding: 4px 8px;
+      background: #333;
+      color: #eee;
+      border: 1px solid #666;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    button:hover {
+      background: #444;
+    }
+    input[type="range"] {
+      width: 160px;
+    }
+    #topRow {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+      display: flex;
+  flex-direction: row;
+  gap: 10px;
+  align-items: flex-start;
+  justify-content: center;
+  margin-top: 10px;
+}
+#bottomRow {
+  display: flex;
+  flex-direction: row;
+  gap: 0;
+  align-items: flex-start;
+  justify-content: center;
+  margin-top: 10px;
+}
+    .panel {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    canvas {
+      background: #222;
+      border: 1px solid #555;
+    }
+    #info {
+      margin-top: 8px;
+      font-size: 13px;
+      text-align: center;
+      max-width: 900px;
+    }
+    .legend {
+      font-size: 12px;
+      margin-top: 4px;
+      text-align: center;
+    }
+    .legend span {
+      display: inline-block;
+      margin-right: 8px;
+      margin-top: 2px;
+    }
+    .legend-color {
+      width: 10px;
+      height: 10px;
+      display: inline-block;
+      margin-right: 4px;
+      vertical-align: middle;
+    }
+  </style>
+</head>
+<body>
+  <h3>Two Subsystems, Phase-Space Entropy & Interaction Network</h3>
+
+  <div id="controls">
+    <button id="resetBtn">Reset (A hot, B cold, wall closed)</button>
+    <button id="toggleWallBtn">Open wall</button>
+    <button id="pauseBtn">Pause</button>
+
+    <label>
+      &nbsp;Particles:
+      <input type="range" id="particleSlider" min="2" max="100" step="2" value="10">
+      <span id="particleSliderText">10</span>
+    </label>
+  </div>
+
+  <div id="topRow">
+    <div style="text-align:center; font-size:13px; margin-bottom:4px;">
+      Particle motion: Left = system A, Right = system B
+    </div>
+    <canvas id="boxCanvas" width="800" height="200"></canvas>
+  </div>
+
+  <div id="bottomRow">
+    <div class="panel">
+      <div style="text-align:center; font-size:13px; margin-bottom:4px;">
+        Smoothed phase-space entropies (left axis) & largest component size (right axis)
+      </div>
+      <canvas id="entropyCanvas" width="450" height="250"></canvas>
+      <div class="legend">
+        <span><span class="legend-color" style="background:#ff6666;"></span>S<sub>A</sub> (left subsystem)</span>
+        <span><span class="legend-color" style="background:#66aaff;"></span>S<sub>B</sub> (right subsystem)</span>
+        <span><span class="legend-color" style="background:#55dd88;"></span>S<sub>tot</sub> (whole system)</span>
+        <span><span class="legend-color" style="background:#44ff44; border:1px dashed #44ff44;"></span>Max S<sub>tot</sub> while wall closed</span>
+        <span><span class="legend-color" style="background:#ffdd55;"></span>Largest connected component (right axis)</span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div style="text-align:center; font-size:13px; margin-bottom:4px;">
+        Interaction network (edge = at least one collision)
+      </div>
+      <canvas id="networkCanvas" width="350" height="250"></canvas>
+    </div>
+  </div>
+
+  <div id="info">
+    <div>
+      Number of particles: <span id="numParticlesLabel"></span>
+      &nbsp;|&nbsp; Wall: <span id="wallStateLabel"></span>
+      &nbsp;|&nbsp; Running: <span id="runningLabel"></span>
+    </div>
+    <div>
+      Current S<sub>A</sub> = <span id="SAVal"></span>,
+      S<sub>B</sub> = <span id="SBVal"></span>,
+      S<sub>tot</sub> = <span id="StotVal"></span>
+    </div>
+    <div>
+      Average kinetic energy (A): <span id="EAVal"></span>,
+      (B): <span id="EBVal"></span>
+    </div>
+    <div style="margin-top:4px; font-size:12px; color:#bbb;">
+      Entropy is a coarse-grained phase-space entropy: we bin both position and speed.
+      S<sub>A</sub>, S<sub>B</sub> are entropies of each subsystem; S<sub>tot</sub> is the entropy
+      of the whole system. The green dashed line marks the maximum S<sub>tot</sub> while the wall
+      is still closed. The yellow line uses the right-hand axis and shows the size of the largest
+      connected component in the interaction network.
+    </div>
+  </div>
+
+  <script>
+    // -----------------------------
+    // Geometry and DOM
+    // -----------------------------
+    const boxCanvas = document.getElementById("boxCanvas");
+    const boxCtx = boxCanvas.getContext("2d");
+    const entropyCanvas = document.getElementById("entropyCanvas");
+    const entropyCtx = entropyCanvas.getContext("2d");
+    const networkCanvas = document.getElementById("networkCanvas");
+    const networkCtx = networkCanvas.getContext("2d");
+
+    const resetBtn = document.getElementById("resetBtn");
+    const toggleWallBtn = document.getElementById("toggleWallBtn");
+    const pauseBtn = document.getElementById("pauseBtn");
+    const particleSlider = document.getElementById("particleSlider");
+    const particleSliderText = document.getElementById("particleSliderText");
+
+    const numParticlesLabel = document.getElementById("numParticlesLabel");
+    const wallStateLabel = document.getElementById("wallStateLabel");
+    const runningLabel = document.getElementById("runningLabel");
+    const SAVal = document.getElementById("SAVal");
+    const SBVal = document.getElementById("SBVal");
+    const StotVal = document.getElementById("StotVal");
+    const EAVal = document.getElementById("EAVal");
+    const EBVal = document.getElementById("EBVal");
+
+    const BOX_WIDTH = boxCanvas.width;
+    const BOX_HEIGHT = boxCanvas.height;
+    const PADDING_X = 20;
+    const PADDING_Y = 20;
+    const INNER_LEFT = PADDING_X;
+    const INNER_RIGHT = BOX_WIDTH - PADDING_X;
+    const INNER_TOP = PADDING_Y;
+    const INNER_BOTTOM = BOX_HEIGHT - PADDING_Y;
+    const MID_X = (INNER_LEFT + INNER_RIGHT) / 2;
+
+    // -----------------------------
+    // Physical parameters
+    // -----------------------------
+    let numParticles = parseInt(particleSlider.value, 10);
+
+    const PARTICLE_RADIUS = 4;
+    const DT = 0.03;
+    const SPEED_HOT = 200;
+    const SPEED_COLD = 60;
+
+    // Phase-space coarse-graining
+    const X_BINS_HALF = 8;
+    const X_BINS_TOTAL = 16;
+    const V_BINS = 8;
+    const V_MAX = SPEED_HOT * 1.1;
+
+    // Sampling & smoothing
+    const SAMPLE_EVERY = 3;
+    const SMOOTH_WINDOW = 15;
+
+    // -----------------------------
+    // State
+    // -----------------------------
+    let particles = [];
+    let barrierOpen = false;
+    let running = true;
+
+    let SA_history = [];
+    let SB_history = [];
+    let Stot_history = [];
+    let largestCC_history = [];
+    let frameCount = 0;
+
+    // reference total entropy: max S_tot while wall is closed
+    let refTotalEntropy = null;
+
+    // interaction graph
+    let interactionGraph = [];
+
+    // -----------------------------
+    // Helpers
+    // -----------------------------
+    function randUniform(a, b) {
+      return a + Math.random() * (b - a);
+    }
+
+    function randomDirection() {
+      const angle = Math.random() * 2 * Math.PI;
+      return { dx: Math.cos(angle), dy: Math.sin(angle) };
+    }
+
+    function kineticEnergy(vx, vy) {
+      return 0.5 * (vx * vx + vy * vy);
+    }
+
+    function clamp(val, lo, hi) {
+      return Math.max(lo, Math.min(hi, val));
+    }
+
+    function entropyFromBins(bins, totalCount) {
+      if (totalCount === 0) return 0;
+      let S = 0;
+      for (let c of bins) {
+        if (c > 0) {
+          const p = c / totalCount;
+          S -= p * Math.log(p);
+        }
+      }
+      return S;
+    }
+
+    function movingAverage(series, windowSize) {
+      const n = series.length;
+      if (n === 0) return [];
+      const out = new Array(n).fill(0);
+      let sum = 0;
+      for (let i = 0; i < n; i++) {
+        sum += series[i];
+        if (i >= windowSize) {
+          sum -= series[i - windowSize];
+        }
+        const count = Math.min(i + 1, windowSize);
+        out[i] = sum / count;
+      }
+      return out;
+    }
+
+    // -----------------------------
+    // Phase-space entropy
+    // -----------------------------
+    function computeEntropiesAndEnergies() {
+      const binsA = new Array(X_BINS_HALF * V_BINS).fill(0);
+      const binsB = new Array(X_BINS_HALF * V_BINS).fill(0);
+      const binsTot = new Array(X_BINS_TOTAL * V_BINS).fill(0);
+
+      let countA = 0, countB = 0;
+      let EA = 0, EB = 0;
+
+      const widthHalf = (INNER_RIGHT - INNER_LEFT) / 2;
+      const widthTotal = (INNER_RIGHT - INNER_LEFT);
+
+      for (const p of particles) {
+        const vx = p.vx;
+        const vy = p.vy;
+        const speed = Math.sqrt(vx * vx + vy * vy);
+        const vNorm = clamp(speed / V_MAX, 0, 0.9999);
+        const vBin = Math.floor(vNorm * V_BINS);
+
+        const xNormTotal = clamp((p.x - INNER_LEFT) / widthTotal, 0, 0.9999);
+        const xBinTot = Math.floor(xNormTotal * X_BINS_TOTAL);
+        const idxTot = xBinTot * V_BINS + vBin;
+        binsTot[idxTot]++;
+
+        const E = kineticEnergy(vx, vy);
+
+        if (p.x < MID_X) {
+          countA++;
+          EA += E;
+          const xNormA = clamp((p.x - INNER_LEFT) / widthHalf, 0, 0.9999);
+          const xBinA = Math.floor(xNormA * X_BINS_HALF);
+          const idxA = xBinA * V_BINS + vBin;
+          binsA[idxA]++;
+        } else {
+          countB++;
+          EB += E;
+          const xNormB = clamp((p.x - MID_X) / widthHalf, 0, 0.9999);
+          const xBinB = Math.floor(xNormB * X_BINS_HALF);
+          const idxB = xBinB * V_BINS + vBin;
+          binsB[idxB]++;
+        }
+      }
+
+      const SA = entropyFromBins(binsA, countA);
+      const SB = entropyFromBins(binsB, countB);
+      const Stot = entropyFromBins(binsTot, particles.length);
+
+      return {
+        SA,
+        SB,
+        Stot,
+        EA: countA > 0 ? EA / countA : 0,
+        EB: countB > 0 ? EB / countB : 0
+      };
+    }
+
+    // -----------------------------
+    // Interaction graph utilities
+    // -----------------------------
+    function initInteractionGraph() {
+      interactionGraph = [];
+      for (let i = 0; i < particles.length; i++) {
+        interactionGraph.push(new Set());
+      }
+    }
+
+    function registerCollision(i, j) {
+      if (!interactionGraph[i] || !interactionGraph[j]) return;
+      interactionGraph[i].add(j);
+      interactionGraph[j].add(i);
+    }
+
+    function computeLargestComponentSize() {
+      const n = particles.length;
+      if (n === 0) return 0;
+      const visited = new Array(n).fill(false);
+      let best = 0;
+
+      for (let i = 0; i < n; i++) {
+        if (visited[i]) continue;
+        let stack = [i];
+        visited[i] = true;
+        let size = 0;
+
+        while (stack.length > 0) {
+          const v = stack.pop();
+          size++;
+          const neighbors = interactionGraph[v];
+          if (!neighbors) continue;
+          for (const w of neighbors) {
+            if (!visited[w]) {
+              visited[w] = true;
+              stack.push(w);
+            }
+          }
+        }
+        if (size > best) best = size;
+      }
+      return best;
+    }
+
+    // -----------------------------
+    // Initialization
+    // -----------------------------
+    function initParticles() {
+      particles = [];
+
+      const halfLeft = Math.floor(numParticles / 2);
+      const halfRight = numParticles - halfLeft;
+
+      for (let i = 0; i < halfLeft; i++) {
+        const x = randUniform(INNER_LEFT + PARTICLE_RADIUS, MID_X - PARTICLE_RADIUS);
+        const y = randUniform(INNER_TOP + PARTICLE_RADIUS, INNER_BOTTOM - PARTICLE_RADIUS);
+        const dir = randomDirection();
+        const speed = randUniform(0.5 * SPEED_HOT, SPEED_HOT);
+        const vx = dir.dx * speed;
+        const vy = dir.dy * speed;
+        particles.push({ x, y, vx, vy, origin: 'A' });
+      }
+
+      for (let i = 0; i < halfRight; i++) {
+        const x = randUniform(MID_X + PARTICLE_RADIUS, INNER_RIGHT - PARTICLE_RADIUS);
+        const y = randUniform(INNER_TOP + PARTICLE_RADIUS, INNER_BOTTOM - PARTICLE_RADIUS);
+        const dir = randomDirection();
+        const speed = randUniform(0.5 * SPEED_COLD, SPEED_COLD);
+        const vx = dir.dx * speed;
+        const vy = dir.dy * speed;
+        particles.push({ x, y, vx, vy, origin: 'B' });
+      }
+
+      SA_history = [];
+      SB_history = [];
+      Stot_history = [];
+      largestCC_history = [];
+      frameCount = 0;
+      refTotalEntropy = null;
+      initInteractionGraph();
+
+      const initStats = computeEntropiesAndEnergies();
+      SAVal.textContent = initStats.SA.toFixed(3);
+      SBVal.textContent = initStats.SB.toFixed(3);
+      StotVal.textContent = initStats.Stot.toFixed(3);
+      EAVal.textContent = initStats.EA.toFixed(1);
+      EBVal.textContent = initStats.EB.toFixed(1);
+    }
+
+    // -----------------------------
+    // Dynamics
+    // -----------------------------
+function handleWallCollisions(p) {
+  // Collisions with outer box walls
+  if (p.x < INNER_LEFT + PARTICLE_RADIUS) {
+    p.x = INNER_LEFT + PARTICLE_RADIUS;
+    p.vx = -p.vx;
+  } else if (p.x > INNER_RIGHT - PARTICLE_RADIUS) {
+    p.x = INNER_RIGHT - PARTICLE_RADIUS;
+    p.vx = -p.vx;
+  }
+
+  if (p.y < INNER_TOP + PARTICLE_RADIUS) {
+    p.y = INNER_TOP + PARTICLE_RADIUS;
+    p.vy = -p.vy;
+  } else if (p.y > INNER_BOTTOM - PARTICLE_RADIUS) {
+    p.y = INNER_BOTTOM - PARTICLE_RADIUS;
+    p.vy = -p.vy;
+  }
+
+  // Central wall: use *origin* to decide which side they must stay on
+  if (!barrierOpen) {
+    if (p.origin === 'A') {
+      const maxX = MID_X - PARTICLE_RADIUS;
+      if (p.x > maxX) {
+        p.x = maxX;
+        if (p.vx > 0) p.vx = -p.vx;  // reflect if moving toward wall
+      }
+    } else { // origin 'B'
+      const minX = MID_X + PARTICLE_RADIUS;
+      if (p.x < minX) {
+        p.x = minX;
+        if (p.vx < 0) p.vx = -p.vx;  // reflect if moving toward wall
+      }
+    }
+  }
+}
+
+
+    function handleParticleCollisions() {
+      const n = particles.length;
+      const diam = 2 * PARTICLE_RADIUS;
+      const diam2 = diam * diam;
+
+      for (let i = 0; i < n; i++) {
+        for (let j = i + 1; j < n; j++) {
+          const pi = particles[i];
+          const pj = particles[j];
+
+          const dx = pj.x - pi.x;
+          const dy = pj.y - pi.y;
+          const dist2 = dx * dx + dy * dy;
+
+          if (dist2 < diam2 && dist2 > 0) {
+            const dist = Math.sqrt(dist2);
+            const nx = dx / dist;
+            const ny = dy / dist;
+
+            const dvx = pj.vx - pi.vx;
+            const dvy = pj.vy - pi.vy;
+            const relVelAlongNormal = dvx * nx + dvy * ny;
+
+            if (relVelAlongNormal < 0) {
+              const impulse = -relVelAlongNormal;
+              const jx = impulse * nx;
+              const jy = impulse * ny;
+
+              pi.vx -= jx;
+              pi.vy -= jy;
+              pj.vx += jx;
+              pj.vy += jy;
+
+              const overlap = diam - dist;
+              const shift = overlap / 2;
+              pi.x -= nx * shift;
+              pi.y -= ny * shift;
+              pj.x += nx * shift;
+              pj.y += ny * shift;
+
+              registerCollision(i, j);
+            }
+          }
+        }
+      }
+    }
+
+    function stepParticles(dt) {
+      for (const p of particles) {
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        handleWallCollisions(p);
+      }
+      handleParticleCollisions();
+    }
+
+    // -----------------------------
+    // Drawing: box
+    // -----------------------------
+    function drawBox() {
+      boxCtx.clearRect(0, 0, BOX_WIDTH, BOX_HEIGHT);
+
+      boxCtx.strokeStyle = "#888";
+      boxCtx.lineWidth = 2;
+      boxCtx.strokeRect(INNER_LEFT, INNER_TOP, INNER_RIGHT - INNER_LEFT, INNER_BOTTOM - INNER_TOP);
+
+      boxCtx.strokeStyle = barrierOpen ? "#444" : "#ccc";
+      boxCtx.lineWidth = barrierOpen ? 1 : 3;
+      boxCtx.beginPath();
+      boxCtx.moveTo(MID_X, INNER_TOP);
+      boxCtx.lineTo(MID_X, INNER_BOTTOM);
+      boxCtx.stroke();
+
+      boxCtx.fillStyle = "#aaa";
+      boxCtx.font = "12px sans-serif";
+      boxCtx.fillText("System A", INNER_LEFT + 5, INNER_TOP + 14);
+      boxCtx.fillText("System B", MID_X + 5, INNER_TOP + 14);
+
+      for (const p of particles) {
+        boxCtx.beginPath();
+        boxCtx.fillStyle = (p.origin === 'A') ? "#ff6666" : "#66aaff";
+        boxCtx.arc(p.x, p.y, PARTICLE_RADIUS, 0, 2 * Math.PI);
+        boxCtx.fill();
+      }
+    }
+
+    // -----------------------------
+    // Drawing: entropy history + largest CC
+    // -----------------------------
+    function drawEntropyHistory() {
+      entropyCtx.clearRect(0, 0, entropyCanvas.width, entropyCanvas.height);
+
+      const w = entropyCanvas.width;
+      const h = entropyCanvas.height;
+      const marginLeft = 40;
+      const marginRight = 40;   // more space for right axis labels
+      const marginTop = 20;
+      const marginBottom = 30;
+
+      entropyCtx.strokeStyle = "#aaa";
+      entropyCtx.lineWidth = 1;
+      entropyCtx.beginPath();
+      entropyCtx.moveTo(marginLeft, marginTop);
+      entropyCtx.lineTo(marginLeft, h - marginBottom);
+      entropyCtx.lineTo(w - marginRight, h - marginBottom);
+      entropyCtx.stroke();
+
+      const n = SA_history.length;
+      if (n === 0) {
+        entropyCtx.fillStyle = "#aaa";
+        entropyCtx.font = "12px sans-serif";
+        entropyCtx.fillText("Entropies will appear as simulation runs.", marginLeft + 10, marginTop + 20);
+        return;
+      }
+
+      const SA_sm = movingAverage(SA_history, SMOOTH_WINDOW);
+      const SB_sm = movingAverage(SB_history, SMOOTH_WINDOW);
+      const Stot_sm = movingAverage(Stot_history, SMOOTH_WINDOW);
+      const CC_sm  = movingAverage(largestCC_history, SMOOTH_WINDOW);
+
+      let maxS = 0;
+      for (let i = 0; i < n; i++) {
+        maxS = Math.max(maxS, SA_sm[i], SB_sm[i], Stot_sm[i]);
+      }
+      if (maxS === 0) maxS = 1;
+
+      const maxCC = numParticles > 0 ? numParticles : 1;
+
+      const plotWidth = w - marginLeft - marginRight;
+      const plotHeight = h - marginTop - marginBottom;
+
+      function xCoord(i) {
+        if (n <= 1) return marginLeft;
+        return marginLeft + (i / (Math.max(n - 1, 1))) * plotWidth;
+      }
+      function yEntropy(S) {
+        return marginTop + (1 - S / maxS) * plotHeight;
+      }
+      function yCC(size) {
+        return marginTop + (1 - size / maxCC) * plotHeight;
+      }
+
+      // dashed green reference line: max total entropy while wall closed
+      if (refTotalEntropy !== null) {
+        const yRef = yEntropy(refTotalEntropy);
+        entropyCtx.strokeStyle = "#44ff44";
+        entropyCtx.lineWidth = 1;
+        entropyCtx.setLineDash([6, 4]);
+        entropyCtx.beginPath();
+        entropyCtx.moveTo(marginLeft, yRef);
+        entropyCtx.lineTo(w - marginRight, yRef);
+        entropyCtx.stroke();
+        entropyCtx.setLineDash([]);
+      }
+
+      function drawSeries(series, color, yFun) {
+        entropyCtx.strokeStyle = color;
+        entropyCtx.lineWidth = 1.5;
+        entropyCtx.beginPath();
+        for (let i = 0; i < n; i++) {
+          const x = xCoord(i);
+          const y = yFun(series[i]);
+          if (i === 0) entropyCtx.moveTo(x, y);
+          else entropyCtx.lineTo(x, y);
+        }
+        entropyCtx.stroke();
+      }
+
+      // entropy curves (left axis)
+      drawSeries(SA_sm,   "#ff6666", yEntropy);
+      drawSeries(SB_sm,   "#66aaff", yEntropy);
+      drawSeries(Stot_sm, "#55dd88", yEntropy);
+
+      // largest connected component (right axis)
+      drawSeries(CC_sm, "#ffdd55", yCC);
+
+      // axes labels
+      entropyCtx.fillStyle = "#ccc";
+      entropyCtx.font = "11px sans-serif";
+      entropyCtx.fillText("time (samples)", w / 2 - 35, h - 8);
+      entropyCtx.save();
+      entropyCtx.translate(12, h / 2 + 20);
+      entropyCtx.rotate(-Math.PI / 2);
+      entropyCtx.fillText("S (phase-space, smoothed)", 0, 0);
+      entropyCtx.restore();
+
+      // left axis ticks
+      entropyCtx.fillText("0", marginLeft - 22, h - marginBottom + 4);
+      entropyCtx.fillText(maxS.toFixed(1), marginLeft - 30, marginTop + 4);
+
+      // right axis: draw vertical line + ticks for CC
+      const rightX = w - marginRight;
+      entropyCtx.strokeStyle = "#777";
+      entropyCtx.beginPath();
+      entropyCtx.moveTo(rightX, marginTop);
+      entropyCtx.lineTo(rightX, h - marginBottom);
+      entropyCtx.stroke();
+
+      entropyCtx.fillStyle = "#ffdd55";
+      entropyCtx.fillText("0", rightX + 4, h - marginBottom + 4);
+      entropyCtx.fillText(maxCC.toString(), rightX + 4, marginTop + 4);
+
+      entropyCtx.save();
+      entropyCtx.translate(w - 10, h / 2 + 20);
+      entropyCtx.rotate(-Math.PI / 2);
+      entropyCtx.fillText("Largest component size", 0, 0);
+      entropyCtx.restore();
+    }
+
+    // -----------------------------
+    // Drawing: interaction network
+    // -----------------------------
+    function drawNetwork() {
+      const w = networkCanvas.width;
+      const h = networkCanvas.height;
+      networkCtx.clearRect(0, 0, w, h);
+
+      const n = particles.length;
+      if (n === 0) return;
+
+      const cx = w / 2;
+      const cy = h / 2;
+      const radius = Math.min(w, h) * 0.35;
+
+      const nodePos = [];
+      for (let i = 0; i < n; i++) {
+        const angle = (2 * Math.PI * i) / n - Math.PI / 2;
+        const x = cx + radius * Math.cos(angle);
+        const y = cy + radius * Math.sin(angle);
+        nodePos.push({ x, y });
+      }
+
+      networkCtx.strokeStyle = "#555";
+      networkCtx.lineWidth = 1;
+      for (let i = 0; i < n; i++) {
+        if (!interactionGraph[i]) continue;
+        for (const j of interactionGraph[i]) {
+          if (j <= i) continue;
+          const pi = nodePos[i];
+          const pj = nodePos[j];
+          networkCtx.beginPath();
+          networkCtx.moveTo(pi.x, pi.y);
+          networkCtx.lineTo(pj.x, pj.y);
+          networkCtx.stroke();
+        }
+      }
+
+      for (let i = 0; i < n; i++) {
+        const p = particles[i];
+        const pos = nodePos[i];
+        const color = (p.origin === 'A') ? "#ff6666" : "#66aaff";
+
+        networkCtx.beginPath();
+        networkCtx.fillStyle = color;
+        networkCtx.arc(pos.x, pos.y, 6, 0, 2 * Math.PI);
+        networkCtx.fill();
+
+        networkCtx.strokeStyle = "#ddd";
+        networkCtx.lineWidth = 1;
+        networkCtx.stroke();
+      }
+    }
+
+    // -----------------------------
+    // Main loop
+    // -----------------------------
+    function step() {
+      if (running) {
+        stepParticles(DT);
+        frameCount++;
+
+        if (frameCount % SAMPLE_EVERY === 0) {
+          const stats = computeEntropiesAndEnergies();
+          const largestCC = computeLargestComponentSize();
+
+          // update reference entropy only while wall is closed
+          if (!barrierOpen) {
+            if (refTotalEntropy === null || stats.Stot > refTotalEntropy) {
+              refTotalEntropy = stats.Stot;
+            }
+          }
+
+          SA_history.push(stats.SA);
+          SB_history.push(stats.SB);
+          Stot_history.push(stats.Stot);
+          largestCC_history.push(largestCC);
+
+          SAVal.textContent = stats.SA.toFixed(3);
+          SBVal.textContent = stats.SB.toFixed(3);
+          StotVal.textContent = stats.Stot.toFixed(3);
+          EAVal.textContent = stats.EA.toFixed(1);
+          EBVal.textContent = stats.EB.toFixed(1);
+        }
+      }
+
+      drawBox();
+      drawEntropyHistory();
+      drawNetwork();
+      requestAnimationFrame(step);
+    }
+
+    // -----------------------------
+    // Controls
+    // -----------------------------
+    function updateLabels() {
+      numParticlesLabel.textContent = numParticles.toString();
+      wallStateLabel.textContent = barrierOpen ? "open" : "closed";
+      runningLabel.textContent = running ? "yes" : "no";
+      toggleWallBtn.textContent = barrierOpen ? "Close wall" : "Open wall";
+      pauseBtn.textContent = running ? "Pause" : "Resume";
+      particleSliderText.textContent = numParticles.toString();
+    }
+
+    resetBtn.addEventListener("click", () => {
+      barrierOpen = false;
+      initParticles();
+      updateLabels();
+    });
+
+    toggleWallBtn.addEventListener("click", () => {
+      barrierOpen = !barrierOpen;
+      updateLabels();
+    });
+
+    pauseBtn.addEventListener("click", () => {
+      running = !running;
+      updateLabels();
+    });
+
+    particleSlider.addEventListener("input", () => {
+      numParticles = parseInt(particleSlider.value, 10);
+      initParticles();
+      updateLabels();
+    });
+
+    // -----------------------------
+    // Start
+    // -----------------------------
+    initParticles();
+    updateLabels();
+    requestAnimationFrame(step);
+  </script>
+</body>
+</html>
+
