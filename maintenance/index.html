@@ -1,1 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ULM — Down for Maintenance</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
 
+    body {
+      background-color: #f5f0e8;
+      font-family: Georgia, serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 2rem;
+    }
+
+    .container {
+      max-width: 600px;
+      width: 100%;
+      text-align: center;
+    }
+
+    .cartoon {
+      width: 100%;
+      max-width: 480px;
+      height: auto;
+      border-radius: 4px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+      margin-bottom: 2rem;
+    }
+
+    h1 {
+      font-size: 1.8rem;
+      color: #1a1a1a;
+      margin-bottom: 0.75rem;
+      letter-spacing: 0.02em;
+    }
+
+    p {
+      font-size: 1.05rem;
+      color: #555;
+      line-height: 1.6;
+      margin-bottom: 0.5rem;
+    }
+
+    .domain {
+      margin-top: 2rem;
+      font-size: 0.85rem;
+      color: #aaa;
+      letter-spacing: 0.05em;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <img id="cartoon" class="cartoon" src="" alt="ULM cartoon">
+    <h1>Down for Maintenance</h1>
+    <p>Thanks for testing. We'll be back soon.</p>
+    <p class="domain">komplexai.io</p>
+  </div>
+
+  <script>
+    const images = [
+      "images/stilts_2.png",
+      "images/quidditch_2.png",
+      "images/big_cavement_3.png",
+      "images/mohawk.png",
+      "images/yeti_3.png",
+      "images/robot_ULM.png",
+      "images/der_schrei.png",
+      "images/campfire_eyes.png",
+      "images/knight_dragon.png"
+    ];
+
+    const img = document.getElementById("cartoon");
+    img.src = images[Math.floor(Math.random() * images.length)];
+  </script>
+</body>
+</html>
