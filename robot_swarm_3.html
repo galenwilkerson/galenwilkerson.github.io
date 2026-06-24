@@ -56,7 +56,7 @@
         <div class="slider-container">
             <label for="speed">Simulation Speed</label>
             <input type="range" id="speed" min="10" max="1000" step="10" value="30">
-            <span id="speedValue">10</span>
+            <span id="speedValue">30</span>
         </div>
         <div class="slider-container">
             <label for="radius">Connection Radius</label>
@@ -87,12 +87,12 @@
     </div>
     <script>
         const width = 800, height = 800; // Size of the canvas
-        let N = 20; // Number of robots
+        let N = 50; // Number of robots
         let b = 20; // Number of oil blobs
         let S = 15; // Average size of oil blobs
         let cv = 0.5; // Coefficient of variation of oil blob size
         let v = 20; // Step size of robots
-        let speed = 10; // Simulation speed
+        let speed = 30; // Simulation speed
         let radius = 100; // Connection radius
         let p = 1; // Connection probability
         let minThreshold = 0.18; // Min threshold
