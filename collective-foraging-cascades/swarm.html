@@ -5,7 +5,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Cascade Recruitment Swarm — Lévy / LTM foraging on a torus</title>
+<title>Collective foraging from simple recruitment cascades — interactive demo</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
 <style>
   :root { --bg:#0f1116; --panel:#171a21; --ink:#e6e8ec; --muted:#9aa3af;
@@ -42,7 +42,10 @@
   .metric .v { font-size:26px; font-weight:700; font-variant-numeric:tabular-nums; line-height:1.15;
                white-space:nowrap; }   /* fixed columns + nowrap => no layout shift as values change */
   .metric .k { font-size:12.5px; color:var(--muted); margin-top:2px; }
-  #regimeNote { font-size:12.5px; color:var(--warn); margin-top:12px; height:3.4em; overflow:hidden; }
+  #regimeNote { font-size:12.5px; color:var(--warn); margin-top:9px; max-width:640px; line-height:1.45; }
+  .plegend { display:flex; gap:16px; font-size:11.5px; color:var(--muted); margin-top:6px; }
+  .plegend .sw { display:inline-block; width:11px; height:11px; border-radius:3px; margin-right:5px;
+                 vertical-align:middle; }
   #plotgrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:12px; }
   .card { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:10px 12px; }
   .card h3 { font-size:13px; text-transform:uppercase; letter-spacing:.03em; color:var(--ink);
@@ -68,11 +71,14 @@
 </head>
 <body>
   <div id="head">
-    <h1>Cascade-mediated recruitment swarm — Lévy exploration + LTM recruitment on a torus</h1>
+    <h1>Collective foraging from simple recruitment cascades</h1>
+    <p class="sub"><i>Lévy exploration + linear-threshold recruitment on a torus — an interactive companion
+       to the paper &ldquo;&hellip;&nbsp;a maximum-entropy path to natural, learner-free&nbsp;RL.&rdquo;</i></p>
     <p class="sub">Agents explore by <b>Lévy flights</b>. When one finds a resource it seeds a
        <b>linear-threshold recruitment cascade</b> (rule <i>a/k&nbsp;&ge;&nbsp;&theta;</i>) that pulls
        neighbours toward the find; crowding then drops <i>a/k</i> below <i>&theta;</i>, so recruitment
-       <b>blocks itself</b> and agents disperse to explore again — an automatic explore/exploit balance.
+       <b>blocks itself</b> and agents disperse to explore again. This automatic explore/exploit balance
+       is, coarse-grained, a <b>reinforcement-learning policy with no learner</b> — watch it emerge below.
        Drag a slider or click a preset to move the swarm across the <b>cascade window</b>: too sparse
        (nothing spreads), just right (efficient recruitment), or too dense (blocking).</p>
   </div>
@@ -90,6 +96,7 @@
         <span><span class="dot" style="background:#37c26b"></span>recruited (cascade)</span>
         <span><span class="ln"></span>proximity graph &nbsp; <span class="ln" style="border-color:#37c26b"></span>recruited link</span>
       </div>
+      <div id="regimeNote"></div>
     </div>
 
     <div id="figs">
@@ -102,14 +109,14 @@
           <div class="metric"><span class="v" id="mBlock">–</span><span class="k">blocked fraction</span></div>
           <div class="metric"><span class="v" id="mTgt">–</span><span class="k">targets consumed</span></div>
         </div>
-        <div id="regimeNote"></div>
       </div>
 
       <div id="plotgrid">
         <div class="card"><h3><span>Phase space: the explore→recruit→consume→block cycle (Fig. 8)</span><b id="bPhase"></b></h3>
           <canvas id="pPhase" width="500" height="260"></canvas></div>
         <div class="card"><h3><span>Explore / exploit balance over time (self-limitation)</span><b id="bBal"></b></h3>
-          <canvas id="pIU" width="500" height="220"></canvas></div>
+          <canvas id="pIU" width="500" height="220"></canvas>
+          <div class="plegend"><span><i class="sw" style="background:#d94f3d"></i>exploring</span><span><i class="sw" style="background:#37c26b"></i>recruited</span><span><i class="sw" style="background:#f0a92e"></i>on food (seed)</span></div></div>
         <div class="card"><h3><span>Local criticality: recruited-cluster CCDF (log-log)</span><b id="bCrit"></b></h3>
           <canvas id="pCrit" width="500" height="220"></canvas></div>
       </div>
@@ -295,16 +302,16 @@ function sampleTheta(){ const s=P.tspread.v;
   return Math.min(Math.max(P.theta.v + (s>0 ? randn()*s : 0), 0.02), 0.95); }
 function newAgent(){ return {x:Math.random()*L, y:Math.random()*L, active:false, seed:false,
                              theta:sampleTheta(), _jr:Math.sqrt(Math.random()), _ja:Math.random()*2*Math.PI,
-                             _deg:0, _blk:false}; }   // _jr,_ja = stable position within a cycle-node cloud
+                             _deg:0, _blk:false, _pstate:null}; }   // _jr,_ja = stable cloud pos; _pstate = last stage
 
 // ---------- state ----------
 let agents=[], patches=[], hubs=[], edgeList=[];
 let lagPts=[], tsExp=[], tsRec=[], tsSeed=[], tsTgt=[], phasePts=[];
 let cum={move:0,comm:0,harv:0,bec:0,act:0,explore:0,converge:0,exploit:0,ticks:0}, ema={move:0,comm:0,harv:0};
-let histPts=[], maxEff=1e-9, sizeHist={}, tsCasc=[], tsRev=[], running=true, timer=null;
+let histPts=[], maxEff=1e-9, sizeHist={}, tsCasc=[], tsRev=[], flowEMA={}, running=true, timer=null;
 
 function clearLedgers(){ cum={move:0,comm:0,harv:0,bec:0,act:0,explore:0,converge:0,exploit:0,ticks:0}; ema={move:0,comm:0,harv:0};
-  histPts=[]; maxEff=1e-9; sizeHist={}; tsCasc=[]; tsRev=[]; phasePts=[]; }
+  histPts=[]; maxEff=1e-9; sizeHist={}; tsCasc=[]; tsRev=[]; phasePts=[]; flowEMA={}; }
 function syncAgents(){ const n=Math.round(P.N.v);
   while(agents.length<n) agents.push(newAgent());
   if(agents.length>n) agents.length=n; }
@@ -387,6 +394,15 @@ function step(){
     else { const k=nb[i].length; if(k>0){ let a=0; for(const j of nb[i]) if(active[j])a++;
       if(a>0 && a/k<agents[i].theta){ blocked++; agents[i]._blk=true; } } } }   // active neighbours but suppressed by degree
   let reverted=0; for(let i=0;i<N;i++) if(lastActive[i] && !active[i]) reverted++;
+  // FLOWS: count real stage transitions this tick, EMA-smoothed (honest -- agents that actually changed state)
+  const stg=i=> seed[i]?"consume": active[i]?"recruit": agents[i]._blk?"block":"explore";
+  const ftick={};
+  for(let i=0;i<N;i++){ const s=stg(i), p=agents[i]._pstate;
+    if(p && p!==s) ftick[p+">"+s]=(ftick[p+">"+s]||0)+1;
+    agents[i]._pstate=s; }
+  { const AF=0.16;
+    new Set([...Object.keys(flowEMA),...Object.keys(ftick)]).forEach(k=>{
+      flowEMA[k]=(1-AF)*(flowEMA[k]||0)+AF*(ftick[k]||0); }); }
   const cascadeSize=nActive-nSeed, z=2*edges/N, casc=nActive/N;
   const sizes=activeComponents(active,nb), largest=sizes.length?Math.max(...sizes):0;
   for(const s of sizes) sizeHist[s]=(sizeHist[s]||0)+1;
@@ -540,46 +556,59 @@ function smooth(a,w){ const n=a.length; if(n<3||!w) return a; const o=new Array(
   for(let i=0;i<n;i++){ let s=0,m=0; for(let j=Math.max(0,i-w);j<=Math.min(n-1,i+w);j++){ s+=a[j]; m++; } o[i]=s/m; }
   return o; }
 
-// Live version of the paper's state-space cycle (Fig. 8): four stage NODES in a loop
-// (exploration -> recruitment -> consumption -> blocking -> exploration). Each agent sits in the
-// cloud at its current stage; the node grows and brightens with how many agents are there.
-function phaseplot(id, ags, theta){
+// Live version of the paper's state-space cycle (Fig. 8): four stage NODES in a loop. Each agent sits
+// in the cloud at its current stage (node size + brightness = how many are there), and the ARROWS
+// between stages are the real per-tick flows -- their width/brightness is how many agents actually
+// transitioned that way (EMA-smoothed).
+const MAXR=44;                                    // max node radius, for fixed (non-bouncing) labels
+function phaseplot(id, ags, flows){
   const cv=document.getElementById(id), c=cv.getContext("2d"), W=cv.width, H=cv.height;
   c.clearRect(0,0,W,H);
   const padL=18,padR=16,padT=16,padB=26, PW=W-padL-padR, PH=H-padT-padB;
   const PX=fx=>padL+fx*PW, PY=fy=>padT+(1-fy)*PH;                 // fy: 0 bottom, 1 top (activity axis)
-  const N={ explore:{fx:0.14,fy:0.15,col:"#d94f3d",label:"exploration"},
-            recruit:{fx:0.43,fy:0.50,col:"#37c26b",label:"recruitment"},
-            consume:{fx:0.60,fy:0.86,col:"#f0a92e",label:"consumption"},
+  const N={ explore:{fx:0.14,fy:0.16,col:"#d94f3d",label:"exploration"},
+            recruit:{fx:0.44,fy:0.50,col:"#37c26b",label:"recruitment"},
+            consume:{fx:0.60,fy:0.85,col:"#f0a92e",label:"consumption"},
             block:  {fx:0.87,fy:0.34,col:"#8892a5",label:"blocking"} };
+  const P=k=>[PX(N[k].fx),PY(N[k].fy)];
   const stateOf=ag=> ag.seed?"consume": ag.active?"recruit": ag._blk?"block":"explore";
   const counts={explore:0,recruit:0,consume:0,block:0}; ags.forEach(a=>counts[stateOf(a)]++);
   const total=Math.max(1,ags.length);
-  // cycle arrows through the node centres
-  const P=k=>[PX(N[k].fx),PY(N[k].fy)];
-  const E=P("explore"),R=P("recruit"),Cn=P("consume"),B=P("block");
-  c.strokeStyle="rgba(174,183,198,0.35)"; c.fillStyle="rgba(174,183,198,0.35)"; c.lineWidth=1.5;
-  arrow(c,E[0],E[1],R[0],R[1], PX(0.20),PY(0.44));
-  arrow(c,R[0],R[1],Cn[0],Cn[1], PX(0.43),PY(0.74));
-  arrow(c,Cn[0],Cn[1],B[0],B[1], PX(0.84),PY(0.74));
-  arrow(c,B[0],B[1],E[0],E[1], PX(0.46),PY(0.06));
-  // node radius grows with the share of agents there (reused for the dot cloud)
-  const rad={}; for(const k in N){ rad[k]=15+34*Math.sqrt(counts[k]/total); }
-  for(const k in N){ const nd=N[k], x=PX(nd.fx), y=PY(nd.fy), r=rad[k], frac=counts[k]/total;
-    c.globalAlpha=0.10+0.24*frac; c.fillStyle=nd.col;                 // halo brightens with count
-    c.beginPath(); c.arc(x,y,r+4,0,7); c.fill();
-    c.globalAlpha=0.55; c.lineWidth=1.2; c.strokeStyle=nd.col;
-    c.beginPath(); c.arc(x,y,r+4,0,7); c.stroke(); c.globalAlpha=1;
-    const ly = (k==="consume") ? y+r+18 : y-(r+9);                     // label above, except top node
-    c.fillStyle="#cfd6e0"; c.font="11.5px -apple-system,Segoe UI,Arial"; c.textAlign="center";
-    c.fillText(nd.label+"  ·  "+counts[k], x, ly);
+  const rad={}; for(const k in N){ rad[k]=13+31*Math.sqrt(counts[k]/total); }
+  // (1) faint static cycle backdrop so the loop always reads
+  const cyc=[["explore","recruit"],["recruit","consume"],["consume","block"],["block","explore"]];
+  c.strokeStyle="rgba(174,183,198,0.14)"; c.fillStyle="rgba(174,183,198,0.14)"; c.lineWidth=1.2;
+  cyc.forEach(([a,b])=>{ const p1=P(a),p2=P(b), mx=(p1[0]+p2[0])/2,my=(p1[1]+p2[1])/2,
+      dx=p2[0]-p1[0],dy=p2[1]-p1[1],len=Math.hypot(dx,dy)||1,bow=0.16*len;
+    arrow(c,p1[0],p1[1],p2[0],p2[1], mx-dy/len*bow, my+dx/len*bow); });
+  // (2) real flow arrows: width + brightness proportional to how many agents actually transitioned
+  const fvals=Object.values(flows||{}); const fmax=Math.max(0.6, ...fvals);
+  for(const key in (flows||{})){ const f=flows[key]; if(f<0.2) continue;
+    const [a,b]=key.split(">"); if(!N[a]||!N[b]) continue;
+    const p1=P(a),p2=P(b), dx=p2[0]-p1[0],dy=p2[1]-p1[1],len=Math.hypot(dx,dy)||1,ux=dx/len,uy=dy/len;
+    const sx=p1[0]+ux*(rad[a]+2), sy=p1[1]+uy*(rad[a]+2), ex=p2[0]-ux*(rad[b]+6), ey=p2[1]-uy*(rad[b]+6);
+    const mx=(sx+ex)/2,my=(sy+ey)/2,bow=0.16*len, t=f/fmax;
+    c.globalAlpha=0.30+0.55*t; c.strokeStyle=N[b].col; c.fillStyle=N[b].col; c.lineWidth=1.4+5.5*t;
+    arrow(c, sx,sy, ex,ey, mx-uy*bow, my+ux*bow); c.globalAlpha=1;
   }
-  // agents as a cloud at their stage node (stable per-agent position within the node)
+  // (3) node halos (brightness = count share)
+  for(const k in N){ const nd=N[k], x=PX(nd.fx), y=PY(nd.fy), r=rad[k], frac=counts[k]/total;
+    c.globalAlpha=0.10+0.24*frac; c.fillStyle=nd.col;
+    c.beginPath(); c.arc(x,y,r+4,0,7); c.fill();
+    c.globalAlpha=0.5; c.lineWidth=1.2; c.strokeStyle=nd.col;
+    c.beginPath(); c.arc(x,y,r+4,0,7); c.stroke(); c.globalAlpha=1;
+  }
+  // (4) agents as a cloud at their stage node
   ags.forEach(ag=>{ const k=stateOf(ag), nd=N[k], r=rad[k]*0.9;
     const x=PX(nd.fx)+Math.cos(ag._ja||0)*(ag._jr||0)*r, y=PY(nd.fy)+Math.sin(ag._ja||0)*(ag._jr||0)*r;
     c.beginPath(); c.arc(x,y,2.5,0,7); c.fillStyle=nd.col; c.globalAlpha=0.85; c.fill(); });
   c.globalAlpha=1;
-  c.fillStyle="#7a828f"; c.font="10px -apple-system,Segoe UI,Arial"; c.textAlign="center";
+  // (5) labels at FIXED positions (offset by MAXR so they never move as node size changes)
+  c.font="11.5px -apple-system,Segoe UI,Arial"; c.textAlign="center"; c.fillStyle="#cfd6e0";
+  for(const k in N){ const nd=N[k], x=PX(nd.fx), y=PY(nd.fy);
+    const ly = (k==="consume") ? y+MAXR+18 : y-MAXR-11;
+    c.fillText(nd.label+"  ·  "+counts[k], x, ly); }
+  c.fillStyle="#7a828f"; c.font="10px -apple-system,Segoe UI,Arial";
   c.fillText("network / spatial density  →", padL+PW/2, H-3); c.textAlign="left";
 }
 function fmt(x){ return x>=1e6?(x/1e6).toFixed(2)+"M":x>=1e3?(x/1e3).toFixed(1)+"k":x>=10?Math.round(x):x.toFixed(2); }
@@ -603,7 +632,7 @@ function render(){
   // scatter can only ever be a blob because a single setting jitters around one z.
   // THE core figure: the explore/exploit cycle. exploring (red) and recruited (green) should
   // anti-correlate -- a cascade pulls agents in, crowding blocks it, and they are released back out.
-  phaseplot("pPhase", agents, P.theta.v);
+  phaseplot("pPhase", agents, flowEMA);
   tseries("pIU", [{arr:smooth(tsExp,4),color:"#d94f3d"},{arr:smooth(tsRec,4),color:"#37c26b"},{arr:smooth(tsSeed,4),color:"#f0a92e"}], 1);
   loglog("pCrit", sizeHist, "#c98cf0");
   const lv=window._live||{};
