@@ -53,6 +53,7 @@
   .card:hover::after { opacity:1; color:var(--blue); }
   #modal { position:fixed; inset:0; background:rgba(6,8,12,.82); display:flex; align-items:center;
            justify-content:center; z-index:50; padding:20px; }
+  #modal[hidden] { display:none; }   /* the id rule would otherwise override the hidden attribute */
   #modalBox { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px 16px;
               box-shadow:0 12px 44px #000b; max-width:96vw; }
   #modalHead { display:flex; justify-content:space-between; align-items:center; gap:16px; margin-bottom:10px; }
@@ -541,7 +542,7 @@ function scatter(id,pts,xf,yf,o){ const [c,W,H]=ctxOf(id); const pad=6;
     c.stroke();
   }
   if(n && !o.line){ const p=pts[n-1]; c.fillStyle="#f0a92e"; c.beginPath(); c.arc(X(xf(p)),Y(yf(p)),4.5,0,7); c.fill(); } }
-function loglog(id,hist,color){
+function loglog(id,hist,color,nRef){
   const cv=document.getElementById(id), c=cv.getContext("2d"), W=cv.width, H=cv.height; c.clearRect(0,0,W,H);
   const padL=44,padR=14,padT=14,padB=30, PW=W-padL-padR, PH=H-padT-padB;
   const frame=()=>{ c.strokeStyle="#2a2f3a"; c.lineWidth=1; c.beginPath();
@@ -550,7 +551,8 @@ function loglog(id,hist,color){
   if(ks.length<2){ frame(); return; }
   const tot=ks.reduce((s,k)=>s+hist[k],0); let cum=0; const pts=[];   // CCDF P(S≥s)
   const kmax=ks[ks.length-1]; for(const k of ks){ const ccdf=(tot-cum)/tot; pts.push([Math.log10(k),Math.log10(ccdf)]); cum+=hist[k]; }
-  const xm=Math.max(0.35,Math.log10(Math.max(2,kmax))), ymin=Math.min(-0.4,...pts.map(p=>p[1]));
+  const xtop=(nRef&&nRef>1)?Math.max(kmax,nRef):kmax;
+  const xm=Math.max(0.35,Math.log10(Math.max(2,xtop))), ymin=Math.min(-0.4,...pts.map(p=>p[1]));
   const X=v=>padL+(v/xm)*PW, Y=v=>padT+(v/ymin)*PH;
   // least-squares slope over the SCALING REGION only (the top decade is the finite-size cutoff).
   const fit=pts.filter(q=>q[0]<=xm*0.75 && q[1]>Math.log10(0.02)); let b=NaN,a0=NaN,xlo=0,xhi=0;
@@ -562,6 +564,11 @@ function loglog(id,hist,color){
     window._critSlope=b; window._critR2 = st>1e-12? 1-ss/st : NaN; xlo=fit[0][0]; xhi=fit[fit.length-1][0];
   } else { window._critSlope=NaN; window._critR2=NaN; }
   frame();
+  if(nRef&&nRef>1){ const xr=X(Math.log10(nRef));                       // finite-size ceiling: s = N
+    c.setLineDash([4,4]); c.strokeStyle="#8892a5"; c.lineWidth=1;
+    c.beginPath(); c.moveTo(xr,padT); c.lineTo(xr,padT+PH); c.stroke(); c.setLineDash([]);
+    c.fillStyle="#aeb7c6"; c.font="10px -apple-system,Segoe UI,Arial"; c.textAlign="center";
+    c.fillText("N (swarm size)", Math.min(xr,padL+PW-30), padT+10); }
   if(isFinite(b)){ const xe=Math.min(xhi+0.2,xm);                       // fitted power law (dashed)
     c.setLineDash([5,4]); c.strokeStyle="#f0a92e"; c.lineWidth=1.5;
     c.beginPath(); c.moveTo(X(xlo),Y(a0+b*xlo)); c.lineTo(X(xe),Y(a0+b*xe)); c.stroke(); c.setLineDash([]); }
@@ -574,8 +581,6 @@ function loglog(id,hist,color){
   c.save(); c.translate(12,padT+PH/2); c.rotate(-Math.PI/2); c.fillText("P(S ≥ s)   (log)",0,0); c.restore();
   if(isFinite(b)){ c.fillStyle="#f0a92e"; c.textAlign="left"; c.font="10.5px -apple-system,Segoe UI,Arial";
     c.fillText("straight ⇒ scale-free", X(xlo)+3, Y(a0+b*xlo)-7); }
-  c.fillStyle="#8a93a3"; c.textAlign="right"; c.font="10px -apple-system,Segoe UI,Arial";
-  c.fillText("cutoff ≈ swarm size", X(xm)-2, padT+PH-6);
 }
 function tseries(id,series,ymax){ const [c,W,H]=ctxOf(id); axis(c,W,H);
   const mx=ymax||Math.max(1,...series.flatMap(s=>s.arr));
@@ -672,7 +677,7 @@ function render(){
   // anti-correlate -- a cascade pulls agents in, crowding blocks it, and they are released back out.
   phaseplot("pPhase", agents, flowEMA);
   tseries("pIU", [{arr:smooth(tsExp,4),color:"#d94f3d"},{arr:smooth(tsRec,4),color:"#37c26b"},{arr:smooth(tsSeed,4),color:"#f0a92e"}], 1);
-  loglog("pCrit", sizeHist, "#c98cf0");
+  loglog("pCrit", sizeHist, "#c98cf0", P.N.v);
   const lv=window._live||{};
   const set=(id,v)=>document.getElementById(id).textContent=v;
   set("mDeg",(lv.z||0).toFixed(1)); set("mCasc",((lv.recr||0)*100).toFixed(0)+"%");
@@ -699,7 +704,7 @@ const ZOOM={
 function drawZoom(){ if(!zoom) return;
   if(zoom==="pPhase") phaseplot("modalCanvas", agents, flowEMA);
   else if(zoom==="pIU") tseries("modalCanvas", [{arr:smooth(tsExp,4),color:"#d94f3d"},{arr:smooth(tsRec,4),color:"#37c26b"},{arr:smooth(tsSeed,4),color:"#f0a92e"}], 1);
-  else if(zoom==="pCrit") loglog("modalCanvas", sizeHist, "#c98cf0"); }
+  else if(zoom==="pCrit") loglog("modalCanvas", sizeHist, "#c98cf0", P.N.v); }
 function openZoom(id){ zoom=id; const z=ZOOM[id];
   document.getElementById("modalTitle").textContent=z.title;
   document.getElementById("modalNote").textContent=z.note;
