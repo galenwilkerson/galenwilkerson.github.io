@@ -19,8 +19,13 @@
   #app { display:flex; gap:16px; padding:10px 24px 28px; align-items:flex-start; }
   #torusWrap { position:relative; width:640px; flex:0 0 auto; }
   #canvas { background:#fbfbfd; border-radius:8px; }
-  #badge { position:absolute; top:12px; left:12px; padding:6px 12px; border-radius:6px;
-           font-size:13px; font-weight:700; color:#0b0d11; }
+  #regimeCorner { position:absolute; top:12px; left:12px; display:flex; flex-direction:column;
+                  gap:6px; align-items:flex-start; }
+  #presetLabel { padding:6px 12px; border-radius:6px; font-size:13px; font-weight:700;
+                 background:rgba(20,23,30,.82); color:#e6e8ec; border:1px solid #ffffff26; }
+  #presetLabel .cap { font-size:10px; font-weight:650; letter-spacing:.06em; text-transform:uppercase;
+                      color:#9aa3af; margin-right:6px; }
+  #badge { padding:6px 12px; border-radius:6px; font-size:13px; font-weight:700; color:#0b0d11; }
   #legend { display:flex; flex-wrap:wrap; gap:16px; align-items:center; font-size:12.5px;
             color:var(--muted); margin-top:10px; }
   #legend .dot { width:11px; height:11px; border-radius:50%; display:inline-block; margin-right:5px;
@@ -32,56 +37,51 @@
   .panel { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px 14px; }
   .panel h2 { font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted);
               margin:0 0 10px; font-weight:650; }
-  .metrics { display:grid; grid-template-columns:repeat(4,1fr); gap:11px 14px; }
-  .metric .v { font-size:20px; font-weight:680; font-variant-numeric:tabular-nums; }
-  .metric .k { font-size:11px; color:var(--muted); }
+  .metrics { display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:16px 18px; }
+  .metric .v { font-size:27px; font-weight:700; font-variant-numeric:tabular-nums; line-height:1.1; }
+  .metric .k { font-size:13px; color:var(--muted); margin-top:2px; }
   #regimeNote { font-size:12px; color:var(--warn); margin-top:11px; min-height:2.6em; }
   #plotgrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:12px; }
   .card { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:10px 12px; }
-  .card h3 { font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted);
-             margin:0 0 4px; font-weight:650; display:flex; justify-content:space-between; }
+  .card h3 { font-size:13px; text-transform:uppercase; letter-spacing:.03em; color:var(--ink);
+             margin:0 0 6px; font-weight:650; display:flex; justify-content:space-between; gap:8px; }
   .card h3 b { color:var(--ink); font-weight:650; font-variant-numeric:tabular-nums; }
   .card canvas { width:100%; height:auto; display:block; }
   .btns { display:flex; gap:8px; margin-bottom:6px; }
-  button { background:#232838; color:var(--ink); border:1px solid var(--line); border-radius:6px;
-           padding:7px 12px; font-size:13px; cursor:pointer; }
-  button:hover { background:#2b3145; }
-  .sl { margin:9px 0; }
-  .sl label { font-size:12px; display:flex; justify-content:space-between; color:var(--ink); }
-  .sl label b { color:var(--muted); font-weight:600; font-variant-numeric:tabular-nums; }
-  .sl input[type=range]{ width:100%; accent-color:var(--blue); }
-  .note { font-size:11px; color:var(--warn); margin-top:8px; }
+  button { background:#3a425c; color:#fff; border:1px solid #5a648a; border-radius:8px;
+           padding:9px 14px; font-size:13.5px; font-weight:600; cursor:pointer;
+           box-shadow:0 1px 2px #0005; transition:background .12s, box-shadow .12s, transform .06s; }
+  button:hover { background:#4c5678; box-shadow:0 3px 8px #0006; }
+  button:active { transform:translateY(1px); }
+  button.primary { background:var(--blue); border-color:#7ea6f7; color:#08101f; font-weight:750; }
+  button.primary:hover { background:#7aa3f6; }
+  .sl { margin:10px 0; }
+  .sl label { font-size:13px; display:flex; justify-content:space-between; color:var(--ink); }
+  .sl label b { color:var(--blue); font-weight:700; font-variant-numeric:tabular-nums; }
+  .sl input[type=range]{ width:100%; accent-color:var(--blue); height:20px; }
+  .note { font-size:12px; color:var(--muted); margin-top:10px; line-height:1.5; }
+  .grouplab { font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted);
+              margin:6px 0 2px; font-weight:650; }
 </style>
 </head>
 <body>
   <div id="head">
     <h1>Cascade-mediated recruitment swarm — Lévy exploration + LTM recruitment on a torus</h1>
-    <p class="sub">Inactive agents explore by Lévy flights; agents recruited by a linear-threshold
-       cascade (fraction rule <i>a/k&nbsp;&ge;&nbsp;&theta;</i>) converge toward their recruiting
-       parents — flowing toward the seed nodes on each resource. Blocking is emergent: crowding raises
-       degree, drops <i>a/k</i> below <i>&theta;</i>, and releases agents back to exploration, balancing
-       exploration and exploitation. Sliders push the swarm out of the cascade window.</p>
-    <p class="sub">The three presets are derived from a 4096-run global sweep over all 14 controls:
-       each is the median of the top ~2% of <i>actual joint settings</i> (not the best value of each
-       slider taken separately, which produces a frozen swarm that scores well by doing nothing), with
-       a throughput floor so "efficient" cannot mean "inactive". The spread is roughly <b>1000×</b> in
-       <b>steps per target consumed</b>, dominated by the Lévy exponent <b>α</b>: wild superdiffusive
-       jumps (α&nbsp;≈&nbsp;0.55, <i>Worst</i>) make agents overshoot everything, while
-       α&nbsp;≈&nbsp;1.65 (<i>Best movement</i>) is far cheaper.
-       Movement and communication optimise in <i>genuinely different</i> regimes, so there are two
-       "best" buttons and the costs are never summed. <b>Best movement</b> wants near-Brownian search
-       on a well-connected graph; <b>Best comms</b> wants a sparser graph (ρ<sub>r</sub>≈1.4 vs 3.6) so
-       cascades stay local — and pays with ~3× the movement. Note that <b>bits/target is largely a
-       clock</b>: presence beacons fire once per agent per tick whatever the swarm does, so total
-       bits is ~93% determined by how long the job takes. The recruitment-specific cost is the
-       <b>activation</b> channel, which is density dependent and traces the cascade inverted-U —
-       watch that tile to see what recruiting actually costs.</p>
+    <p class="sub">Agents explore by <b>Lévy flights</b>. When one finds a resource it seeds a
+       <b>linear-threshold recruitment cascade</b> (rule <i>a/k&nbsp;&ge;&nbsp;&theta;</i>) that pulls
+       neighbours toward the find; crowding then drops <i>a/k</i> below <i>&theta;</i>, so recruitment
+       <b>blocks itself</b> and agents disperse to explore again — an automatic explore/exploit balance.
+       Drag a slider or click a preset to move the swarm across the <b>cascade window</b>: too sparse
+       (nothing spreads), just right (efficient recruitment), or too dense (blocking).</p>
   </div>
 
   <div id="app">
     <div id="torusWrap">
       <svg id="canvas" width="640" height="640"></svg>
-      <div id="badge">—</div>
+      <div id="regimeCorner">
+        <div id="presetLabel"><span class="cap">preset</span><span id="presetName">Balanced forager</span></div>
+        <div id="badge">—</div>
+      </div>
       <div id="legend">
         <span><span class="dot" style="background:#d94f3d"></span>exploring (Lévy)</span>
         <span><span class="dot" style="background:#f0a92e"></span>seed (harvesting)</span>
@@ -98,13 +98,7 @@
           <div class="metric"><span class="v" id="mCasc">–</span><span class="k">recruited (cascade)</span></div>
           <div class="metric"><span class="v" id="mAct">–</span><span class="k">active fraction</span></div>
           <div class="metric"><span class="v" id="mBlock">–</span><span class="k">blocked fraction</span></div>
-          <div class="metric"><span class="v" id="mPsi">–</span><span class="k">Ψ largest cluster</span></div>
-          <div class="metric"><span class="v" id="mSpt">–</span><span class="k">steps / target ↓</span></div>
-          <div class="metric"><span class="v" id="mBpt">–</span><span class="k">bits / target ↓ (≈ time)</span></div>
-          <div class="metric"><span class="v" id="mApt">–</span><span class="k">activation / target ↓</span></div>
-          <div class="metric"><span class="v" id="mRpn">–</span><span class="k">targets/tick/agent ↑</span></div>
           <div class="metric"><span class="v" id="mTgt">–</span><span class="k">targets consumed</span></div>
-          <div class="metric"><span class="v" id="mSplit">–</span><span class="k">move: explore/travel/exploit</span></div>
         </div>
         <div id="regimeNote"></div>
       </div>
@@ -116,18 +110,21 @@
           <canvas id="pEff" width="500" height="220"></canvas></div>
         <div class="card"><h3><span>Local criticality: cluster-size CCDF (log-log)</span><b id="bCrit"></b></h3>
           <canvas id="pCrit" width="500" height="220"></canvas></div>
-        <div class="card"><h3><span>Self-limitation: cascade frac (t) → blocked frac (t+1)</span><b id="bLag"></b></h3>
-          <canvas id="pTs" width="500" height="220"></canvas></div>
-        <div class="card"><h3><span>Targets consumed over time</span><b id="bPar"></b></h3>
-          <canvas id="pPar" width="500" height="220"></canvas></div>
       </div>
     </div>
 
     <div class="panel" id="controls">
       <h2>Parameters</h2>
       <div class="btns"><button id="btnStart">Pause</button><button id="btnReset">Reset</button></div>
-      <div class="btns"><button id="btnSub">Below percolation</button><button id="btnWindow">Cascade window</button><button id="btnBlocked">Blocked (dense)</button><button id="btnBrown">Brownian search</button><button id="btnBalanced">Balanced forager</button></div>
-      <div class="btns"><button id="btnBestMove">Best movement</button><button id="btnBestComm">Best comms</button><button id="btnBestRate">Best rate</button><button id="btnWorst">Worst regime</button></div>
+      <div class="grouplab">Regime presets — move across the cascade window</div>
+      <div class="btns" id="presetBtns">
+        <button id="btnSub">Below percolation</button>
+        <button id="btnWindow">Cascade window</button>
+        <button id="btnBlocked">Blocked (dense)</button>
+        <button id="btnBrown">Brownian search</button>
+        <button id="btnBalanced">Balanced forager</button>
+      </div>
+      <div class="grouplab">Controls</div>
       <div id="sliderHost"></div>
       <div class="note">Interactive companion to the paper. Drag a slider or click a preset to push
         the swarm across the cascade window — below percolation (no recruitment), inside the window
@@ -267,7 +264,8 @@ Object.entries(P).forEach(([key,o])=>{
     .attr("value",o.v).attr("id","s_"+key)
     .on("input",function(){ o.v=+this.value; d3.select("#b_"+key).text(o.v);
        if(key==="N") syncAgents(); if(key==="M") syncPatches();
-       if(["radius","p","N","theta"].includes(key)) updateBadge(); })
+       if(["radius","p","N","theta"].includes(key)) updateBadge();
+       if(key!=="speed") setPreset("Custom settings", null); })
     .on("change", clearLedgers);                 // fresh measurement per configuration
 });
 
@@ -551,31 +549,14 @@ function render(){
   // and, being fixed-horizon, rewards a swarm that does nothing.
   tseries("pEff", [{arr:tsCasc,color:"#37c26b"}]);
   loglog("pCrit", sizeHist, "#c98cf0");
-  scatter("pTs", lagPts, p=>p.c, p=>p.b, {color:"#37c26b", bin:true, xmax:1, ymax:1});
-  { const n=lagPts.length;
-    if(n>20){ const mx=lagPts.reduce((a,q)=>a+q.c,0)/n, my=lagPts.reduce((a,q)=>a+q.b,0)/n;
-      let sxy=0,sxx=0,syy=0;
-      lagPts.forEach(q=>{const dx=q.c-mx,dy=q.b-my; sxy+=dx*dy; sxx+=dx*dx; syy+=dy*dy;});
-      const r=(sxx>0&&syy>0)? sxy/Math.sqrt(sxx*syy) : NaN;
-      document.getElementById("bLag").textContent = isFinite(r)? "r = "+r.toFixed(2) : "";
-    } }
-  // the two incommensurate costs, never summed: movement vs the recruitment-specific ping channel
-  tseries("pPar", [{arr:tsTgt,color:"#e0a13a"}]);
   const lv=window._live||{};
   const set=(id,v)=>document.getElementById(id).textContent=v;
   set("mDeg",(lv.z||0).toFixed(1)); set("mCasc",((lv.recr||0)*100).toFixed(0)+"%");
   set("mAct",((lv.act||0)*100).toFixed(0)+"%"); set("mBlock",((lv.blocked||0)*100).toFixed(0)+"%");
-  set("mPsi",(lv.psi||0).toFixed(2));
-  set("mSpt", isFinite(lv.stepsPerTgt)? fmt(lv.stepsPerTgt) : "–");
-  set("mBpt", isFinite(lv.bitsPerTgt) ? fmt(lv.bitsPerTgt)  : "–");
-  set("mApt", isFinite(lv.actPerTgt)  ? fmt(lv.actPerTgt)   : "–");
-  set("mRpn", isFinite(lv.ratePerNode)? lv.ratePerNode.toFixed(4) : "–");
   set("mTgt", (lv.tgts||0).toFixed(1));
-  set("mSplit", `${Math.round(100*(lv.fExplore||0))}/${Math.round(100*(lv.fConverge||0))}/${Math.round(100*(lv.fExploit||0))}`);
   document.getElementById("bEff").textContent = tsCasc.length? "peak "+Math.max(...tsCasc) : "";
   document.getElementById("bBal").textContent =
     `explore ${Math.round(100*(1-(lv.act||0)))}% / recruited ${Math.round(100*(lv.recr||0))}%`;
-  document.getElementById("bPar").textContent = (lv.tgts||0).toFixed(1)+" total";
   document.getElementById("bCrit").textContent = isFinite(window._critSlope)
     ? `slope ${window._critSlope.toFixed(2)}  R²=${(window._critR2||0).toFixed(2)}` : "";
 }
@@ -588,17 +569,20 @@ function applyPreset(pre){ Object.keys(P).forEach(k=>{ P[k].v=pre[k].v;
   d3.select("#s_"+k).property("value",P[k].v); d3.select("#b_"+k).text(P[k].v); }); reset(); restartTimer(); }
 document.getElementById("btnStart").onclick=function(){ running=!running; this.textContent=running?"Pause":"Run"; };
 document.getElementById("btnReset").onclick=()=>reset();
-document.getElementById("btnBestMove").onclick=()=>applyPreset(DEFAULTS);
-document.getElementById("btnBestComm").onclick=()=>applyPreset(BEST_COMM);
-document.getElementById("btnBestRate").onclick=()=>applyPreset(BEST_RATE);
-document.getElementById("btnSub").onclick    =()=>applyPreset(BEHAV.sub);
-document.getElementById("btnWindow").onclick =()=>applyPreset(BEHAV.window);
-document.getElementById("btnBlocked").onclick=()=>applyPreset(BEHAV.blocked);
-document.getElementById("btnBrown").onclick  =()=>applyPreset(BEHAV.brown);
-document.getElementById("btnBalanced").onclick=()=>applyPreset(BEHAV.balanced);
-document.getElementById("btnWorst").onclick=()=>applyPreset(WORST);
+// show which preset is active in the corner label + highlight its button; "Custom" once a slider moves
+function setPreset(name, btnId){
+  document.getElementById("presetName").textContent = name;
+  document.querySelectorAll("#presetBtns button").forEach(b=>b.classList.remove("on"));
+  if(btnId) document.getElementById(btnId).classList.add("on");
+}
+[["btnSub","Below percolation",BEHAV.sub], ["btnWindow","Cascade window",BEHAV.window],
+ ["btnBlocked","Blocked (dense)",BEHAV.blocked], ["btnBrown","Brownian search",BEHAV.brown],
+ ["btnBalanced","Balanced forager",BEHAV.balanced]].forEach(([id,name,pre])=>{
+  document.getElementById(id).onclick=()=>{ applyPreset(pre); setPreset(name,id); };
+});
 
-reset(); restartTimer();
+// default: the efficient balanced-forager regime (genuine explore/exploit split, visible Lévy search)
+applyPreset(BEHAV.balanced); setPreset("Balanced forager","btnBalanced");
 </script>
 </body>
 </html>

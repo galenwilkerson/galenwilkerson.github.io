@@ -22,11 +22,18 @@
   .panel h2 { font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted);
               margin:0 0 10px; font-weight:650; }
   canvas { background:#fbfbfd; border-radius:8px; display:block; }
-  .btns { display:flex; gap:8px; flex-wrap:wrap; margin:10px 0 4px; }
-  button { background:#232838; color:var(--ink); border:1px solid var(--line); border-radius:6px;
-           padding:8px 13px; font-size:13px; cursor:pointer; }
-  button:hover { background:#2b3145; }
-  button.on { background:var(--blue); border-color:var(--blue); color:#0b0d11; font-weight:650; }
+  .btns { display:flex; gap:9px; flex-wrap:wrap; margin:12px 0 4px; align-items:center; }
+  .btns .lab { font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted);
+               margin-right:2px; }
+  button { background:#3a425c; color:#fff; border:1px solid #5a648a; border-radius:8px;
+           padding:10px 16px; font-size:13.5px; font-weight:600; cursor:pointer;
+           box-shadow:0 1px 2px #0005; transition:background .12s, box-shadow .12s, transform .06s; }
+  button:hover { background:#4c5678; box-shadow:0 3px 8px #0006; }
+  button:active { transform:translateY(1px); box-shadow:0 1px 2px #0006; }
+  button.primary { background:var(--blue); border-color:#7ea6f7; color:#08101f; font-weight:750; }
+  button.primary:hover { background:#7aa3f6; }
+  button.on { background:var(--blue); border-color:#7ea6f7; color:#08101f; font-weight:750;
+              box-shadow:0 0 0 2px #5b8def55; }
   .stat { display:flex; gap:22px; margin-top:12px; flex-wrap:wrap; }
   .stat .v { font-size:22px; font-weight:680; font-variant-numeric:tabular-nums; }
   .stat .k { font-size:11px; color:var(--muted); }
@@ -56,9 +63,10 @@
       <h2>One uniform-random drop</h2>
       <canvas id="grid" width="380" height="380"></canvas>
       <div class="btns">
-        <button id="newDrop">New random drop</button>
+        <button id="newDrop" class="primary">↻ New random drop</button>
       </div>
       <div class="btns" id="sizeBtns">
+        <span class="lab">grid size</span>
         <button data-side="6">6×6 (M=36)</button>
         <button data-side="8">8×8 (M=64)</button>
         <button data-side="10" class="on">10×10 (M=100)</button>
@@ -81,9 +89,9 @@
       <h2>Distribution over trials — uneven fields dominate</h2>
       <canvas id="dist" width="560" height="380"></canvas>
       <div class="btns">
-        <button id="run1">+1 trial</button>
-        <button id="run1k">Run 1,000</button>
-        <button id="run50k">Run 50,000</button>
+        <span class="lab">trials</span>
+        <button id="run1k" class="primary">▶ Run 1,000</button>
+        <button id="run50k" class="primary">▶▶ Run 50,000</button>
         <button id="resetD">Reset</button>
       </div>
       <div class="stat">
@@ -181,11 +189,11 @@ function drawDist(){
 }
 
 // ---------- run trials ----------
-function addTrial(){
-  const c = drop(SIDE), f = emptyFrac(c);
+function recordFrac(f){                                 // add one empty-cell fraction to the histogram
   let b = Math.floor(f*NBINS); if(b>=NBINS) b=NBINS-1;
   hist[b]++; trials++; sumFrac+=f; if(f===0) evenSeen++;
 }
+function addTrial(){ recordFrac(emptyFrac(drop(SIDE))); }   // fast batch trial (no grid render)
 function runMany(n){
   for(let i=0;i<n;i++) addTrial();
   updateStats(); drawDist();
@@ -199,16 +207,18 @@ function resetDist(){ hist=new Array(NBINS).fill(0); trials=0; sumFrac=0; evenSe
   updateStats(); drawDist(); }
 
 // ---------- single-drop panel ----------
+// One visible drop: show it in the grid AND count it as a trial in the distribution on the right.
 function newDrop(){
   curCounts = drop(SIDE);
-  document.getElementById("sEmpty").textContent = emptyFrac(curCounts).toFixed(3);
+  const f = emptyFrac(curCounts);
+  document.getElementById("sEmpty").textContent = f.toFixed(3);
   document.getElementById("sMax").textContent = Math.max(...curCounts);
   drawGrid();
+  recordFrac(f); updateStats(); drawDist();
 }
 
 // ---------- controls ----------
 document.getElementById("newDrop").onclick = newDrop;
-document.getElementById("run1").onclick  = ()=>runMany(1);
 document.getElementById("run1k").onclick = ()=>runMany(1000);
 document.getElementById("run50k").onclick= ()=>runMany(50000);
 document.getElementById("resetD").onclick= resetDist;
@@ -221,7 +231,7 @@ document.querySelectorAll("#sizeBtns button").forEach(btn=>{
 });
 
 // ---------- init ----------
-newDrop(); resetDist();
+resetDist(); newDrop();   // first visible drop also seeds the distribution as trial #1
 </script>
 </body>
 </html>
