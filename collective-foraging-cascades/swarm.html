@@ -46,6 +46,7 @@
   .plegend { display:flex; gap:16px; font-size:11.5px; color:var(--muted); margin-top:6px; }
   .plegend .sw { display:inline-block; width:11px; height:11px; border-radius:3px; margin-right:5px;
                  vertical-align:middle; }
+  .pnote { font-size:11.5px; color:var(--muted); margin-top:7px; line-height:1.45; }
   #plotgrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:12px; }
   .card { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:10px 12px; }
   .card h3 { font-size:13px; text-transform:uppercase; letter-spacing:.03em; color:var(--ink);
@@ -118,7 +119,11 @@
           <canvas id="pIU" width="500" height="220"></canvas>
           <div class="plegend"><span><i class="sw" style="background:#d94f3d"></i>exploring</span><span><i class="sw" style="background:#37c26b"></i>recruited</span><span><i class="sw" style="background:#f0a92e"></i>on food (seed)</span></div></div>
         <div class="card"><h3><span>Local criticality: recruited-cluster CCDF (log-log)</span><b id="bCrit"></b></h3>
-          <canvas id="pCrit" width="500" height="220"></canvas></div>
+          <canvas id="pCrit" width="500" height="220"></canvas>
+          <div class="pnote">A straight line on log–log axes is a <b>power law</b>: recruited clusters have
+            <b>no typical size</b> (scale-free) — the fingerprint of criticality. Cascades of every size occur,
+            up to a finite-size cutoff set by the swarm. That the swarm self-organizes to this poised, critical-like
+            state — with no tuning — is the point.</div></div>
       </div>
     </div>
 
@@ -515,31 +520,42 @@ function scatter(id,pts,xf,yf,o){ const [c,W,H]=ctxOf(id); const pad=6;
     c.stroke();
   }
   if(n && !o.line){ const p=pts[n-1]; c.fillStyle="#f0a92e"; c.beginPath(); c.arc(X(xf(p)),Y(yf(p)),4.5,0,7); c.fill(); } }
-function loglog(id,hist,color){ const [c,W,H]=ctxOf(id); const pad=8;
+function loglog(id,hist,color){
+  const cv=document.getElementById(id), c=cv.getContext("2d"), W=cv.width, H=cv.height; c.clearRect(0,0,W,H);
+  const padL=44,padR=14,padT=14,padB=30, PW=W-padL-padR, PH=H-padT-padB;
+  const frame=()=>{ c.strokeStyle="#2a2f3a"; c.lineWidth=1; c.beginPath();
+    c.moveTo(padL,padT); c.lineTo(padL,padT+PH); c.lineTo(padL+PW,padT+PH); c.stroke(); };
   const ks=Object.keys(hist).map(Number).filter(k=>k>=1).sort((a,b)=>a-b);
-  if(ks.length<2){ axis(c,W,H); return; }
+  if(ks.length<2){ frame(); return; }
   const tot=ks.reduce((s,k)=>s+hist[k],0); let cum=0; const pts=[];   // CCDF P(S≥s)
   const kmax=ks[ks.length-1]; for(const k of ks){ const ccdf=(tot-cum)/tot; pts.push([Math.log10(k),Math.log10(ccdf)]); cum+=hist[k]; }
-  const xm=Math.log10(Math.max(2,kmax)), ymin=Math.min(...pts.map(p=>p[1]));
-  const X=v=>pad+(v/xm)*(W-2*pad), Y=v=>pad+((v)/(ymin))*(H-2*pad);
-  // least-squares slope of log10 CCDF vs log10 size: the power-law exponent. Reported in the header
-  // because the curve alone is unreadable without axes -- a straight line here means scale-free.
-  // Fit only the SCALING REGION: the top decade is dominated by the finite-size cutoff (visible as
-  // the cliff at the right), and including it biases the exponent steep. Also report R^2 -- without
-  // it "scale-free" is unfalsifiable, and with N~100 there is barely 1.5 decades to fit.
-  { const fit=pts.filter(q=>q[0]<=xm*0.75 && q[1]>Math.log10(0.02));
-    const n=fit.length;
-    if(n>=4){ const sx=fit.reduce((a,q)=>a+q[0],0), sy=fit.reduce((a,q)=>a+q[1],0);
-      const sxx=fit.reduce((a,q)=>a+q[0]*q[0],0), sxy=fit.reduce((a,q)=>a+q[0]*q[1],0);
-      const syy=fit.reduce((a,q)=>a+q[1]*q[1],0), den=n*sxx-sx*sx;
-      const b=den>1e-9?(n*sxy-sx*sy)/den:NaN, a0=(sy-b*sx)/n;
-      let ss=0,st=0; const my=sy/n;
-      fit.forEach(q=>{ const pr=a0+b*q[0]; ss+=(q[1]-pr)*(q[1]-pr); st+=(q[1]-my)*(q[1]-my); });
-      window._critSlope=b; window._critR2 = st>1e-12? 1-ss/st : NaN;
-    } else { window._critSlope=NaN; window._critR2=NaN; } }
-  axis(c,W,H); c.strokeStyle=color; c.lineWidth=2; c.beginPath();
+  const xm=Math.max(0.35,Math.log10(Math.max(2,kmax))), ymin=Math.min(-0.4,...pts.map(p=>p[1]));
+  const X=v=>padL+(v/xm)*PW, Y=v=>padT+(v/ymin)*PH;
+  // least-squares slope over the SCALING REGION only (the top decade is the finite-size cutoff).
+  const fit=pts.filter(q=>q[0]<=xm*0.75 && q[1]>Math.log10(0.02)); let b=NaN,a0=NaN,xlo=0,xhi=0;
+  if(fit.length>=4){ const n=fit.length,
+      sx=fit.reduce((a,q)=>a+q[0],0), sy=fit.reduce((a,q)=>a+q[1],0),
+      sxx=fit.reduce((a,q)=>a+q[0]*q[0],0), sxy=fit.reduce((a,q)=>a+q[0]*q[1],0), den=n*sxx-sx*sx;
+    b=den>1e-9?(n*sxy-sx*sy)/den:NaN; a0=(sy-b*sx)/n;
+    let ss=0,st=0; const my=sy/n; fit.forEach(q=>{ const pr=a0+b*q[0]; ss+=(q[1]-pr)**2; st+=(q[1]-my)**2; });
+    window._critSlope=b; window._critR2 = st>1e-12? 1-ss/st : NaN; xlo=fit[0][0]; xhi=fit[fit.length-1][0];
+  } else { window._critSlope=NaN; window._critR2=NaN; }
+  frame();
+  if(isFinite(b)){ const xe=Math.min(xhi+0.2,xm);                       // fitted power law (dashed)
+    c.setLineDash([5,4]); c.strokeStyle="#f0a92e"; c.lineWidth=1.5;
+    c.beginPath(); c.moveTo(X(xlo),Y(a0+b*xlo)); c.lineTo(X(xe),Y(a0+b*xe)); c.stroke(); c.setLineDash([]); }
+  c.strokeStyle=color; c.lineWidth=2; c.beginPath();                    // CCDF curve
   pts.forEach((p,i)=>{ const x=X(p[0]),y=Y(p[1]); i?c.lineTo(x,y):c.moveTo(x,y); }); c.stroke();
-  c.fillStyle=color; pts.forEach(p=>{ c.beginPath(); c.arc(X(p[0]),Y(p[1]),2,0,7); c.fill(); }); }
+  c.fillStyle=color; pts.forEach(p=>{ c.beginPath(); c.arc(X(p[0]),Y(p[1]),2,0,7); c.fill(); });
+  // labels + annotations
+  c.font="10px -apple-system,Segoe UI,Arial"; c.textAlign="center"; c.fillStyle="#9aa3af";
+  c.fillText("recruited-cluster size  s   (log) →", padL+PW/2, H-4);
+  c.save(); c.translate(12,padT+PH/2); c.rotate(-Math.PI/2); c.fillText("P(S ≥ s)   (log)",0,0); c.restore();
+  if(isFinite(b)){ c.fillStyle="#f0a92e"; c.textAlign="left"; c.font="10.5px -apple-system,Segoe UI,Arial";
+    c.fillText("straight ⇒ scale-free", X(xlo)+3, Y(a0+b*xlo)-7); }
+  c.fillStyle="#8a93a3"; c.textAlign="right"; c.font="10px -apple-system,Segoe UI,Arial";
+  c.fillText("cutoff ≈ swarm size", X(xm)-2, padT+PH-6);
+}
 function tseries(id,series,ymax){ const [c,W,H]=ctxOf(id); axis(c,W,H);
   const mx=ymax||Math.max(1,...series.flatMap(s=>s.arr));
   for(const s of series){ if(s.arr.length<2) continue; c.strokeStyle=s.color; c.lineWidth=1.6; c.beginPath();
