@@ -106,8 +106,8 @@
       </div>
 
       <div id="plotgrid">
-        <div class="card"><h3><span>Phase space: cascade window &amp; the explore→recruit→consume cycle</span><b id="bPhase"></b></h3>
-          <canvas id="pPhase" width="500" height="250"></canvas></div>
+        <div class="card"><h3><span>Phase space: the explore→recruit→consume→block cycle (Fig. 8)</span><b id="bPhase"></b></h3>
+          <canvas id="pPhase" width="500" height="260"></canvas></div>
         <div class="card"><h3><span>Explore / exploit balance over time (self-limitation)</span><b id="bBal"></b></h3>
           <canvas id="pIU" width="500" height="220"></canvas></div>
         <div class="card"><h3><span>Local criticality: recruited-cluster CCDF (log-log)</span><b id="bCrit"></b></h3>
@@ -294,7 +294,8 @@ function tdelta(a,b){ let d=b-a; if(d>L/2)d-=L; if(d<-L/2)d+=L; return d; }   //
 function sampleTheta(){ const s=P.tspread.v;
   return Math.min(Math.max(P.theta.v + (s>0 ? randn()*s : 0), 0.02), 0.95); }
 function newAgent(){ return {x:Math.random()*L, y:Math.random()*L, active:false, seed:false,
-                             theta:sampleTheta(), _jy:(Math.random()*2-1)*0.05, _px:0, _deg:0, _blk:false}; }
+                             theta:sampleTheta(), _jr:Math.sqrt(Math.random()), _ja:Math.random()*2*Math.PI,
+                             _deg:0, _blk:false}; }   // _jr,_ja = stable position within a cycle-node cloud
 
 // ---------- state ----------
 let agents=[], patches=[], hubs=[], edgeList=[];
@@ -539,45 +540,47 @@ function smooth(a,w){ const n=a.length; if(n<3||!w) return a; const o=new Array(
   for(let i=0;i<n;i++){ let s=0,m=0; for(let j=Math.max(0,i-w);j<=Math.min(n-1,i+w);j++){ s+=a[j]; m++; } o[i]=s/m; }
   return o; }
 
-// Live version of the paper's state-space cycle (Fig. 8): each AGENT is a dot placed at
-// (its local degree, its activity state). As states change the population flows around the loop
-// exploration -> recruitment -> consumption -> blocking -> exploration.
+// Live version of the paper's state-space cycle (Fig. 8): four stage NODES in a loop
+// (exploration -> recruitment -> consumption -> blocking -> exploration). Each agent sits in the
+// cloud at its current stage; the node grows and brightens with how many agents are there.
 function phaseplot(id, ags, theta){
   const cv=document.getElementById(id), c=cv.getContext("2d"), W=cv.width, H=cv.height;
   c.clearRect(0,0,W,H);
-  const padL=94,padR=14,padT=14,padB=32, PW=W-padL-padR, PH=H-padT-padB;
-  const zmax=26, zc=4.5, zb=Math.min(2/theta,zmax);
-  const X=z=>padL+Math.min(Math.max(z,0),zmax)/zmax*PW, Y=a=>padT+PH-Math.min(Math.max(a,0),1)*PH;
-  const LY={explore:0.12, block:0.32, recruit:0.60, consume:0.88};
-  c.fillStyle="rgba(55,194,107,0.06)"; c.fillRect(X(zc),padT,X(zb)-X(zc),PH);         // cascade window
-  c.setLineDash([3,4]); c.strokeStyle="#5b6478"; c.lineWidth=1;
-  [zc,zb].forEach(z=>{ c.beginPath(); c.moveTo(X(z),padT); c.lineTo(X(z),padT+PH); c.stroke(); });
-  c.setLineDash([]);
-  c.strokeStyle="#2a2f3a"; c.lineWidth=1;
-  c.beginPath(); c.moveTo(padL,padT); c.lineTo(padL,padT+PH); c.lineTo(padL+PW,padT+PH); c.stroke();
-  // Fig-8 cycle arrows through the region centroids
-  const E=[X(3),Y(LY.explore)], R=[X(10),Y(LY.recruit)], Co=[X(15),Y(LY.consume)], B=[X(21.5),Y(LY.block)];
-  c.strokeStyle="rgba(174,183,198,0.40)"; c.fillStyle="rgba(174,183,198,0.40)"; c.lineWidth=1.5;
-  arrow(c, E[0],E[1], R[0],R[1], X(5),Y(0.42));
-  arrow(c, R[0],R[1], Co[0],Co[1], X(12),Y(0.80));
-  arrow(c, Co[0],Co[1], B[0],B[1], X(22),Y(0.66));
-  arrow(c, B[0],B[1], E[0],E[1], X(11),Y(0.05));
-  c.font="11px -apple-system,Segoe UI,Arial"; c.textAlign="right"; c.fillStyle="#aeb7c6";
-  c.fillText("consumption", padL-8, Y(LY.consume)+4);
-  c.fillText("recruitment", padL-8, Y(LY.recruit)+4);
-  c.fillText("blocking",    padL-8, Y(LY.block)+4);
-  c.fillText("exploration", padL-8, Y(LY.explore)+4);
-  c.textAlign="left";
-  const yOf=ag=> ag.seed?LY.consume : ag.active?LY.recruit : ag._blk?LY.block : LY.explore;
-  const cOf=ag=> ag.seed?"#f0a92e" : ag.active?"#37c26b" : ag._blk?"#8892a5" : "#d94f3d";
-  ags.forEach(ag=>{ ag._px = ag._px ? 0.75*ag._px + 0.25*(ag._deg||0) : (ag._deg||0);
-    const x=X(ag._px), y=Y(yOf(ag)+(ag._jy||0));
-    c.beginPath(); c.arc(x,y,2.7,0,7); c.fillStyle=cOf(ag); c.globalAlpha=0.8; c.fill(); });
+  const padL=18,padR=16,padT=16,padB=26, PW=W-padL-padR, PH=H-padT-padB;
+  const PX=fx=>padL+fx*PW, PY=fy=>padT+(1-fy)*PH;                 // fy: 0 bottom, 1 top (activity axis)
+  const N={ explore:{fx:0.14,fy:0.15,col:"#d94f3d",label:"exploration"},
+            recruit:{fx:0.43,fy:0.50,col:"#37c26b",label:"recruitment"},
+            consume:{fx:0.60,fy:0.86,col:"#f0a92e",label:"consumption"},
+            block:  {fx:0.87,fy:0.34,col:"#8892a5",label:"blocking"} };
+  const stateOf=ag=> ag.seed?"consume": ag.active?"recruit": ag._blk?"block":"explore";
+  const counts={explore:0,recruit:0,consume:0,block:0}; ags.forEach(a=>counts[stateOf(a)]++);
+  const total=Math.max(1,ags.length);
+  // cycle arrows through the node centres
+  const P=k=>[PX(N[k].fx),PY(N[k].fy)];
+  const E=P("explore"),R=P("recruit"),Cn=P("consume"),B=P("block");
+  c.strokeStyle="rgba(174,183,198,0.35)"; c.fillStyle="rgba(174,183,198,0.35)"; c.lineWidth=1.5;
+  arrow(c,E[0],E[1],R[0],R[1], PX(0.20),PY(0.44));
+  arrow(c,R[0],R[1],Cn[0],Cn[1], PX(0.43),PY(0.74));
+  arrow(c,Cn[0],Cn[1],B[0],B[1], PX(0.84),PY(0.74));
+  arrow(c,B[0],B[1],E[0],E[1], PX(0.46),PY(0.06));
+  // node radius grows with the share of agents there (reused for the dot cloud)
+  const rad={}; for(const k in N){ rad[k]=15+34*Math.sqrt(counts[k]/total); }
+  for(const k in N){ const nd=N[k], x=PX(nd.fx), y=PY(nd.fy), r=rad[k], frac=counts[k]/total;
+    c.globalAlpha=0.10+0.24*frac; c.fillStyle=nd.col;                 // halo brightens with count
+    c.beginPath(); c.arc(x,y,r+4,0,7); c.fill();
+    c.globalAlpha=0.55; c.lineWidth=1.2; c.strokeStyle=nd.col;
+    c.beginPath(); c.arc(x,y,r+4,0,7); c.stroke(); c.globalAlpha=1;
+    const ly = (k==="consume") ? y+r+18 : y-(r+9);                     // label above, except top node
+    c.fillStyle="#cfd6e0"; c.font="11.5px -apple-system,Segoe UI,Arial"; c.textAlign="center";
+    c.fillText(nd.label+"  ·  "+counts[k], x, ly);
+  }
+  // agents as a cloud at their stage node (stable per-agent position within the node)
+  ags.forEach(ag=>{ const k=stateOf(ag), nd=N[k], r=rad[k]*0.9;
+    const x=PX(nd.fx)+Math.cos(ag._ja||0)*(ag._jr||0)*r, y=PY(nd.fy)+Math.sin(ag._ja||0)*(ag._jr||0)*r;
+    c.beginPath(); c.arc(x,y,2.5,0,7); c.fillStyle=nd.col; c.globalAlpha=0.85; c.fill(); });
   c.globalAlpha=1;
-  c.font="10px -apple-system,Segoe UI,Arial"; c.textAlign="center"; c.fillStyle="#9aa3af";
-  [0,5,10,15,20,25].forEach(z=>{ c.fillText(String(z), X(z), padT+PH+13); });
-  c.fillText("local degree  (sparse → dense; window shaded)", padL+PW/2, H-4);
-  c.textAlign="left";
+  c.fillStyle="#7a828f"; c.font="10px -apple-system,Segoe UI,Arial"; c.textAlign="center";
+  c.fillText("network / spatial density  →", padL+PW/2, H-3); c.textAlign="left";
 }
 function fmt(x){ return x>=1e6?(x/1e6).toFixed(2)+"M":x>=1e3?(x/1e3).toFixed(1)+"k":x>=10?Math.round(x):x.toFixed(2); }
 
