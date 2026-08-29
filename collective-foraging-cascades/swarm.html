@@ -37,10 +37,12 @@
   .panel { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px 14px; }
   .panel h2 { font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted);
               margin:0 0 10px; font-weight:650; }
-  .metrics { display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:16px 18px; }
-  .metric .v { font-size:27px; font-weight:700; font-variant-numeric:tabular-nums; line-height:1.1; }
-  .metric .k { font-size:13px; color:var(--muted); margin-top:2px; }
-  #regimeNote { font-size:12px; color:var(--warn); margin-top:11px; min-height:2.6em; }
+  .metrics { display:grid; grid-template-columns:repeat(5,1fr); gap:16px 14px; }
+  .metric { min-width:0; }
+  .metric .v { font-size:26px; font-weight:700; font-variant-numeric:tabular-nums; line-height:1.15;
+               white-space:nowrap; }   /* fixed columns + nowrap => no layout shift as values change */
+  .metric .k { font-size:12.5px; color:var(--muted); margin-top:2px; }
+  #regimeNote { font-size:12.5px; color:var(--warn); margin-top:12px; height:3.4em; overflow:hidden; }
   #plotgrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:12px; }
   .card { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:10px 12px; }
   .card h3 { font-size:13px; text-transform:uppercase; letter-spacing:.03em; color:var(--ink);
@@ -292,7 +294,7 @@ function tdelta(a,b){ let d=b-a; if(d>L/2)d-=L; if(d<-L/2)d+=L; return d; }   //
 function sampleTheta(){ const s=P.tspread.v;
   return Math.min(Math.max(P.theta.v + (s>0 ? randn()*s : 0), 0.02), 0.95); }
 function newAgent(){ return {x:Math.random()*L, y:Math.random()*L, active:false, seed:false,
-                             theta:sampleTheta()}; }
+                             theta:sampleTheta(), _jy:(Math.random()*2-1)*0.05, _px:0, _deg:0, _blk:false}; }
 
 // ---------- state ----------
 let agents=[], patches=[], hubs=[], edgeList=[];
@@ -376,12 +378,13 @@ function step(){
       dExplore+=Math.hypot(dx,dy);
     }
     agents[i].x=wrap(px[i]+dx); agents[i].y=wrap(py[i]+dy); moveTick+=Math.hypot(dx,dy);
-    agents[i].active=active[i]; agents[i].seed=seed[i]; }
+    agents[i].active=active[i]; agents[i].seed=seed[i]; agents[i]._deg=nb[i].length; }
   // 5) OBSERVABLES
   let nActive=0,nSeed=0,blocked=0;
-  for(let i=0;i<N;i++){ if(active[i]){ nActive++; if(seed[i])nSeed++; }
+  for(let i=0;i<N;i++){ agents[i]._blk=false;
+    if(active[i]){ nActive++; if(seed[i])nSeed++; }
     else { const k=nb[i].length; if(k>0){ let a=0; for(const j of nb[i]) if(active[j])a++;
-      if(a>0 && a/k<agents[i].theta) blocked++; } } }        // has active neighbours but suppressed by degree
+      if(a>0 && a/k<agents[i].theta){ blocked++; agents[i]._blk=true; } } } }   // active neighbours but suppressed by degree
   let reverted=0; for(let i=0;i<N;i++) if(lastActive[i] && !active[i]) reverted++;
   const cascadeSize=nActive-nSeed, z=2*edges/N, casc=nActive/N;
   const sizes=activeComponents(active,nb), largest=sizes.length?Math.max(...sizes):0;
@@ -524,40 +527,56 @@ function tseries(id,series,ymax){ const [c,W,H]=ctxOf(id); axis(c,W,H);
   const mx=ymax||Math.max(1,...series.flatMap(s=>s.arr));
   for(const s of series){ if(s.arr.length<2) continue; c.strokeStyle=s.color; c.lineWidth=1.6; c.beginPath();
     s.arr.forEach((y,i)=>{ const x=i/(s.arr.length-1)*W, py=H-2-(y/mx)*(H-4); i?c.lineTo(x,py):c.moveTo(x,py); }); c.stroke(); } }
-// Phase plane echoing the paper's state-space cycle figure (Fig. 8): x = connectivity/density
-// (mean degree z), y = activity (active fraction). The cascade window is shaded between the
-// percolation boundary z_c and the blocking boundary 2/theta. The swarm's live state is a trailing
-// dot -- it slides across regimes as you change connectivity, and bobs in activity as it self-limits.
-function phaseplot(id, pts, theta){
+function arrow(c,x1,y1,x2,y2,cx,cy){                    // curved arrow with a head at (x2,y2)
+  c.beginPath(); c.moveTo(x1,y1); c.quadraticCurveTo(cx,cy,x2,y2); c.stroke();
+  const ang=Math.atan2(y2-cy,x2-cx);
+  c.beginPath(); c.moveTo(x2,y2);
+  c.lineTo(x2-9*Math.cos(ang-0.42), y2-9*Math.sin(ang-0.42));
+  c.lineTo(x2-9*Math.cos(ang+0.42), y2-9*Math.sin(ang+0.42));
+  c.closePath(); c.fill();
+}
+function smooth(a,w){ const n=a.length; if(n<3||!w) return a; const o=new Array(n);
+  for(let i=0;i<n;i++){ let s=0,m=0; for(let j=Math.max(0,i-w);j<=Math.min(n-1,i+w);j++){ s+=a[j]; m++; } o[i]=s/m; }
+  return o; }
+
+// Live version of the paper's state-space cycle (Fig. 8): each AGENT is a dot placed at
+// (its local degree, its activity state). As states change the population flows around the loop
+// exploration -> recruitment -> consumption -> blocking -> exploration.
+function phaseplot(id, ags, theta){
   const cv=document.getElementById(id), c=cv.getContext("2d"), W=cv.width, H=cv.height;
   c.clearRect(0,0,W,H);
-  const padL=42,padR=10,padT=16,padB=34, PW=W-padL-padR, PH=H-padT-padB;
-  const zmax=26, zc=4.5, zb=Math.min(2/theta, zmax);
+  const padL=94,padR=14,padT=14,padB=32, PW=W-padL-padR, PH=H-padT-padB;
+  const zmax=26, zc=4.5, zb=Math.min(2/theta,zmax);
   const X=z=>padL+Math.min(Math.max(z,0),zmax)/zmax*PW, Y=a=>padT+PH-Math.min(Math.max(a,0),1)*PH;
-  c.fillStyle="rgba(91,141,239,0.12)"; c.fillRect(X(0),padT,X(zc)-X(0),PH);          // sparse
-  c.fillStyle="rgba(55,194,107,0.15)"; c.fillRect(X(zc),padT,X(zb)-X(zc),PH);        // window
-  c.fillStyle="rgba(224,123,57,0.12)"; c.fillRect(X(zb),padT,X(zmax)-X(zb),PH);      // blocking
-  c.setLineDash([4,4]); c.strokeStyle="#8892a5"; c.lineWidth=1;
+  const LY={explore:0.12, block:0.32, recruit:0.60, consume:0.88};
+  c.fillStyle="rgba(55,194,107,0.06)"; c.fillRect(X(zc),padT,X(zb)-X(zc),PH);         // cascade window
+  c.setLineDash([3,4]); c.strokeStyle="#5b6478"; c.lineWidth=1;
   [zc,zb].forEach(z=>{ c.beginPath(); c.moveTo(X(z),padT); c.lineTo(X(z),padT+PH); c.stroke(); });
   c.setLineDash([]);
   c.strokeStyle="#2a2f3a"; c.lineWidth=1;
   c.beginPath(); c.moveTo(padL,padT); c.lineTo(padL,padT+PH); c.lineTo(padL+PW,padT+PH); c.stroke();
-  const n=pts.length;                                                                // fading trail
-  for(let i=1;i<n;i++){ const a=0.05+0.55*(i/n);
-    c.strokeStyle="rgba(230,232,236,"+a.toFixed(3)+")"; c.lineWidth=1.7;
-    c.beginPath(); c.moveTo(X(pts[i-1].z),Y(pts[i-1].act)); c.lineTo(X(pts[i].z),Y(pts[i].act)); c.stroke(); }
-  if(n){ const p=pts[n-1], col = p.z<zc?"#5b8def":(p.z>2/theta?"#e0a13a":"#37c26b");  // current state
-    c.beginPath(); c.arc(X(p.z),Y(p.act),6,0,7); c.fillStyle=col; c.fill();
-    c.lineWidth=1.6; c.strokeStyle="#fff"; c.stroke(); }
-  c.font="11px -apple-system,Segoe UI,Arial"; c.textAlign="center";
-  c.fillStyle="rgba(126,166,247,0.9)";  c.fillText("sparse", (X(0)+X(zc))/2, padT+12);
-  c.fillStyle="rgba(95,208,139,0.95)";  c.fillText("cascade window", (X(zc)+X(zb))/2, padT+12);
-  c.fillStyle="rgba(231,176,106,0.95)"; c.fillText("blocking", (X(zb)+X(zmax))/2, padT+12);
-  c.fillStyle="#9aa3af"; c.fillText("mean degree z   (connectivity / density →)", padL+PW/2, H-6);
-  c.font="10px -apple-system,Segoe UI,Arial";
+  // Fig-8 cycle arrows through the region centroids
+  const E=[X(3),Y(LY.explore)], R=[X(10),Y(LY.recruit)], Co=[X(15),Y(LY.consume)], B=[X(21.5),Y(LY.block)];
+  c.strokeStyle="rgba(174,183,198,0.40)"; c.fillStyle="rgba(174,183,198,0.40)"; c.lineWidth=1.5;
+  arrow(c, E[0],E[1], R[0],R[1], X(5),Y(0.42));
+  arrow(c, R[0],R[1], Co[0],Co[1], X(12),Y(0.80));
+  arrow(c, Co[0],Co[1], B[0],B[1], X(22),Y(0.66));
+  arrow(c, B[0],B[1], E[0],E[1], X(11),Y(0.05));
+  c.font="11px -apple-system,Segoe UI,Arial"; c.textAlign="right"; c.fillStyle="#aeb7c6";
+  c.fillText("consumption", padL-8, Y(LY.consume)+4);
+  c.fillText("recruitment", padL-8, Y(LY.recruit)+4);
+  c.fillText("blocking",    padL-8, Y(LY.block)+4);
+  c.fillText("exploration", padL-8, Y(LY.explore)+4);
+  c.textAlign="left";
+  const yOf=ag=> ag.seed?LY.consume : ag.active?LY.recruit : ag._blk?LY.block : LY.explore;
+  const cOf=ag=> ag.seed?"#f0a92e" : ag.active?"#37c26b" : ag._blk?"#8892a5" : "#d94f3d";
+  ags.forEach(ag=>{ ag._px = ag._px ? 0.75*ag._px + 0.25*(ag._deg||0) : (ag._deg||0);
+    const x=X(ag._px), y=Y(yOf(ag)+(ag._jy||0));
+    c.beginPath(); c.arc(x,y,2.7,0,7); c.fillStyle=cOf(ag); c.globalAlpha=0.8; c.fill(); });
+  c.globalAlpha=1;
+  c.font="10px -apple-system,Segoe UI,Arial"; c.textAlign="center"; c.fillStyle="#9aa3af";
   [0,5,10,15,20,25].forEach(z=>{ c.fillText(String(z), X(z), padT+PH+13); });
-  c.save(); c.translate(12, padT+PH/2); c.rotate(-Math.PI/2); c.textAlign="center";
-  c.fillText("activity (active fraction) →", 0, 0); c.restore();
+  c.fillText("local degree  (sparse → dense; window shaded)", padL+PW/2, H-4);
   c.textAlign="left";
 }
 function fmt(x){ return x>=1e6?(x/1e6).toFixed(2)+"M":x>=1e3?(x/1e3).toFixed(1)+"k":x>=10?Math.round(x):x.toFixed(2); }
@@ -581,8 +600,8 @@ function render(){
   // scatter can only ever be a blob because a single setting jitters around one z.
   // THE core figure: the explore/exploit cycle. exploring (red) and recruited (green) should
   // anti-correlate -- a cascade pulls agents in, crowding blocks it, and they are released back out.
-  phaseplot("pPhase", phasePts, P.theta.v);
-  tseries("pIU", [{arr:tsExp,color:"#d94f3d"},{arr:tsRec,color:"#37c26b"},{arr:tsSeed,color:"#f0a92e"}], 1);
+  phaseplot("pPhase", agents, P.theta.v);
+  tseries("pIU", [{arr:smooth(tsExp,4),color:"#d94f3d"},{arr:smooth(tsRec,4),color:"#37c26b"},{arr:smooth(tsSeed,4),color:"#f0a92e"}], 1);
   loglog("pCrit", sizeHist, "#c98cf0");
   const lv=window._live||{};
   const set=(id,v)=>document.getElementById(id).textContent=v;
