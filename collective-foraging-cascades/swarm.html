@@ -33,7 +33,7 @@
   #legend .ln { width:18px; height:0; border-top:2px solid #aeb7c6; display:inline-block;
                 margin-right:5px; vertical-align:middle; }
   #figs { flex:1 1 auto; min-width:0; display:flex; flex-direction:column; gap:14px; }
-  #controls { width:300px; flex:0 0 auto; max-height:calc(100vh - 40px); overflow:auto; }
+  #controls { width:300px; flex:0 0 auto; }   /* grows to fit; the whole window scrolls, not the pane */
   .panel { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px 14px; }
   .panel h2 { font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted);
               margin:0 0 10px; font-weight:650; }
@@ -104,11 +104,11 @@
       </div>
 
       <div id="plotgrid">
-        <div class="card"><h3><span>Explore / exploit balance over time</span><b id="bBal"></b></h3>
+        <div class="card"><h3><span>Phase space: cascade window &amp; the explore→recruit→consume cycle</span><b id="bPhase"></b></h3>
+          <canvas id="pPhase" width="500" height="250"></canvas></div>
+        <div class="card"><h3><span>Explore / exploit balance over time (self-limitation)</span><b id="bBal"></b></h3>
           <canvas id="pIU" width="500" height="220"></canvas></div>
-        <div class="card"><h3><span>Cascade size over time (bursts)</span><b id="bEff"></b></h3>
-          <canvas id="pEff" width="500" height="220"></canvas></div>
-        <div class="card"><h3><span>Local criticality: cluster-size CCDF (log-log)</span><b id="bCrit"></b></h3>
+        <div class="card"><h3><span>Local criticality: recruited-cluster CCDF (log-log)</span><b id="bCrit"></b></h3>
           <canvas id="pCrit" width="500" height="220"></canvas></div>
       </div>
     </div>
@@ -296,12 +296,12 @@ function newAgent(){ return {x:Math.random()*L, y:Math.random()*L, active:false,
 
 // ---------- state ----------
 let agents=[], patches=[], hubs=[], edgeList=[];
-let lagPts=[], tsExp=[], tsRec=[], tsSeed=[], tsTgt=[];
+let lagPts=[], tsExp=[], tsRec=[], tsSeed=[], tsTgt=[], phasePts=[];
 let cum={move:0,comm:0,harv:0,bec:0,act:0,explore:0,converge:0,exploit:0,ticks:0}, ema={move:0,comm:0,harv:0};
 let histPts=[], maxEff=1e-9, sizeHist={}, tsCasc=[], tsRev=[], running=true, timer=null;
 
 function clearLedgers(){ cum={move:0,comm:0,harv:0,bec:0,act:0,explore:0,converge:0,exploit:0,ticks:0}; ema={move:0,comm:0,harv:0};
-  histPts=[]; maxEff=1e-9; sizeHist={}; tsCasc=[]; tsRev=[]; }
+  histPts=[]; maxEff=1e-9; sizeHist={}; tsCasc=[]; tsRev=[]; phasePts=[]; }
 function syncAgents(){ const n=Math.round(P.N.v);
   while(agents.length<n) agents.push(newAgent());
   if(agents.length>n) agents.length=n; }
@@ -417,6 +417,7 @@ function step(){
   const mTot = Math.max(cum.explore+cum.converge+cum.exploit,1e-9);
   histPts.push({z, casc:cascadeSize/N, eff, cost, harv:ema.harv, spt:stepsPerTgt, apt:actPerTgt}); if(histPts.length>600) histPts.shift();
   tsCasc.push(cascadeSize); if(tsCasc.length>200) tsCasc.shift();
+  phasePts.push({z, act:casc}); if(phasePts.length>160) phasePts.shift();   // (density, activity) trail
   // time-domain traces: this demo is for WATCHING one setting, so the panels show how the swarm
   // cycles rather than how it responds to parameters (which needs a sweep and belongs in the paper).
   tsExp.push((N-nActive)/N); tsRec.push(cascadeSize/N); tsSeed.push(nSeed/N); tsTgt.push(tgts);
@@ -523,6 +524,42 @@ function tseries(id,series,ymax){ const [c,W,H]=ctxOf(id); axis(c,W,H);
   const mx=ymax||Math.max(1,...series.flatMap(s=>s.arr));
   for(const s of series){ if(s.arr.length<2) continue; c.strokeStyle=s.color; c.lineWidth=1.6; c.beginPath();
     s.arr.forEach((y,i)=>{ const x=i/(s.arr.length-1)*W, py=H-2-(y/mx)*(H-4); i?c.lineTo(x,py):c.moveTo(x,py); }); c.stroke(); } }
+// Phase plane echoing the paper's state-space cycle figure (Fig. 8): x = connectivity/density
+// (mean degree z), y = activity (active fraction). The cascade window is shaded between the
+// percolation boundary z_c and the blocking boundary 2/theta. The swarm's live state is a trailing
+// dot -- it slides across regimes as you change connectivity, and bobs in activity as it self-limits.
+function phaseplot(id, pts, theta){
+  const cv=document.getElementById(id), c=cv.getContext("2d"), W=cv.width, H=cv.height;
+  c.clearRect(0,0,W,H);
+  const padL=42,padR=10,padT=16,padB=34, PW=W-padL-padR, PH=H-padT-padB;
+  const zmax=26, zc=4.5, zb=Math.min(2/theta, zmax);
+  const X=z=>padL+Math.min(Math.max(z,0),zmax)/zmax*PW, Y=a=>padT+PH-Math.min(Math.max(a,0),1)*PH;
+  c.fillStyle="rgba(91,141,239,0.12)"; c.fillRect(X(0),padT,X(zc)-X(0),PH);          // sparse
+  c.fillStyle="rgba(55,194,107,0.15)"; c.fillRect(X(zc),padT,X(zb)-X(zc),PH);        // window
+  c.fillStyle="rgba(224,123,57,0.12)"; c.fillRect(X(zb),padT,X(zmax)-X(zb),PH);      // blocking
+  c.setLineDash([4,4]); c.strokeStyle="#8892a5"; c.lineWidth=1;
+  [zc,zb].forEach(z=>{ c.beginPath(); c.moveTo(X(z),padT); c.lineTo(X(z),padT+PH); c.stroke(); });
+  c.setLineDash([]);
+  c.strokeStyle="#2a2f3a"; c.lineWidth=1;
+  c.beginPath(); c.moveTo(padL,padT); c.lineTo(padL,padT+PH); c.lineTo(padL+PW,padT+PH); c.stroke();
+  const n=pts.length;                                                                // fading trail
+  for(let i=1;i<n;i++){ const a=0.05+0.55*(i/n);
+    c.strokeStyle="rgba(230,232,236,"+a.toFixed(3)+")"; c.lineWidth=1.7;
+    c.beginPath(); c.moveTo(X(pts[i-1].z),Y(pts[i-1].act)); c.lineTo(X(pts[i].z),Y(pts[i].act)); c.stroke(); }
+  if(n){ const p=pts[n-1], col = p.z<zc?"#5b8def":(p.z>2/theta?"#e0a13a":"#37c26b");  // current state
+    c.beginPath(); c.arc(X(p.z),Y(p.act),6,0,7); c.fillStyle=col; c.fill();
+    c.lineWidth=1.6; c.strokeStyle="#fff"; c.stroke(); }
+  c.font="11px -apple-system,Segoe UI,Arial"; c.textAlign="center";
+  c.fillStyle="rgba(126,166,247,0.9)";  c.fillText("sparse", (X(0)+X(zc))/2, padT+12);
+  c.fillStyle="rgba(95,208,139,0.95)";  c.fillText("cascade window", (X(zc)+X(zb))/2, padT+12);
+  c.fillStyle="rgba(231,176,106,0.95)"; c.fillText("blocking", (X(zb)+X(zmax))/2, padT+12);
+  c.fillStyle="#9aa3af"; c.fillText("mean degree z   (connectivity / density →)", padL+PW/2, H-6);
+  c.font="10px -apple-system,Segoe UI,Arial";
+  [0,5,10,15,20,25].forEach(z=>{ c.fillText(String(z), X(z), padT+PH+13); });
+  c.save(); c.translate(12, padT+PH/2); c.rotate(-Math.PI/2); c.textAlign="center";
+  c.fillText("activity (active fraction) →", 0, 0); c.restore();
+  c.textAlign="left";
+}
 function fmt(x){ return x>=1e6?(x/1e6).toFixed(2)+"M":x>=1e3?(x/1e3).toFixed(1)+"k":x>=10?Math.round(x):x.toFixed(2); }
 
 // Classify from the MEASURED mean degree (2*edges/N), not the nominal p*N*pi*(r/L)^2. Agents cluster
@@ -544,17 +581,15 @@ function render(){
   // scatter can only ever be a blob because a single setting jitters around one z.
   // THE core figure: the explore/exploit cycle. exploring (red) and recruited (green) should
   // anti-correlate -- a cascade pulls agents in, crowding blocks it, and they are released back out.
+  phaseplot("pPhase", phasePts, P.theta.v);
   tseries("pIU", [{arr:tsExp,color:"#d94f3d"},{arr:tsRec,color:"#37c26b"},{arr:tsSeed,color:"#f0a92e"}], 1);
-  // steps per target, NOT the retracted harvest/(move+comm): that ratio sums metres with messages
-  // and, being fixed-horizon, rewards a swarm that does nothing.
-  tseries("pEff", [{arr:tsCasc,color:"#37c26b"}]);
   loglog("pCrit", sizeHist, "#c98cf0");
   const lv=window._live||{};
   const set=(id,v)=>document.getElementById(id).textContent=v;
   set("mDeg",(lv.z||0).toFixed(1)); set("mCasc",((lv.recr||0)*100).toFixed(0)+"%");
   set("mAct",((lv.act||0)*100).toFixed(0)+"%"); set("mBlock",((lv.blocked||0)*100).toFixed(0)+"%");
   set("mTgt", (lv.tgts||0).toFixed(1));
-  document.getElementById("bEff").textContent = tsCasc.length? "peak "+Math.max(...tsCasc) : "";
+  document.getElementById("bPhase").textContent = `z ≈ ${(lv.z||0).toFixed(1)}`;
   document.getElementById("bBal").textContent =
     `explore ${Math.round(100*(1-(lv.act||0)))}% / recruited ${Math.round(100*(lv.recr||0))}%`;
   document.getElementById("bCrit").textContent = isFinite(window._critSlope)
