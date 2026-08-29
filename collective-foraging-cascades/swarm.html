@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<!-- Cascade-mediated recruitment swarm — interactive demo. Author: Galen Wilkerson.
+     Companion to "Collective foraging from simple recruitment cascades: a maximum-entropy
+     path to natural, learner-free RL." Faithful browser port of mobile_cascade.py. -->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Cascade Recruitment Swarm — Lévy / LTM foraging on a torus</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<style>
+  :root { --bg:#0f1116; --panel:#171a21; --ink:#e6e8ec; --muted:#9aa3af;
+          --good:#37c26b; --warn:#e0a13a; --bad:#e0533a; --blue:#5b8def; --line:#2a2f3a; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+         font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; }
+  #head { padding:18px 24px 4px; }
+  h1 { font-size:25px; margin:0 0 5px; font-weight:680; letter-spacing:-.01em; }
+  .sub { color:var(--muted); font-size:14px; margin:0; max-width:1150px; line-height:1.45; }
+  #app { display:flex; gap:16px; padding:10px 24px 28px; align-items:flex-start; }
+  #torusWrap { position:relative; width:640px; flex:0 0 auto; }
+  #canvas { background:#fbfbfd; border-radius:8px; }
+  #badge { position:absolute; top:12px; left:12px; padding:6px 12px; border-radius:6px;
+           font-size:13px; font-weight:700; color:#0b0d11; }
+  #legend { display:flex; flex-wrap:wrap; gap:16px; align-items:center; font-size:12.5px;
+            color:var(--muted); margin-top:10px; }
+  #legend .dot { width:11px; height:11px; border-radius:50%; display:inline-block; margin-right:5px;
+                 vertical-align:middle; }
+  #legend .ln { width:18px; height:0; border-top:2px solid #aeb7c6; display:inline-block;
+                margin-right:5px; vertical-align:middle; }
+  #figs { flex:1 1 auto; min-width:0; display:flex; flex-direction:column; gap:14px; }
+  #controls { width:300px; flex:0 0 auto; max-height:calc(100vh - 40px); overflow:auto; }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px 14px; }
+  .panel h2 { font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted);
+              margin:0 0 10px; font-weight:650; }
+  .metrics { display:grid; grid-template-columns:repeat(4,1fr); gap:11px 14px; }
+  .metric .v { font-size:20px; font-weight:680; font-variant-numeric:tabular-nums; }
+  .metric .k { font-size:11px; color:var(--muted); }
+  #regimeNote { font-size:12px; color:var(--warn); margin-top:11px; min-height:2.6em; }
+  #plotgrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:12px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:10px 12px; }
+  .card h3 { font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted);
+             margin:0 0 4px; font-weight:650; display:flex; justify-content:space-between; }
+  .card h3 b { color:var(--ink); font-weight:650; font-variant-numeric:tabular-nums; }
+  .card canvas { width:100%; height:auto; display:block; }
+  .btns { display:flex; gap:8px; margin-bottom:6px; }
+  button { background:#232838; color:var(--ink); border:1px solid var(--line); border-radius:6px;
+           padding:7px 12px; font-size:13px; cursor:pointer; }
+  button:hover { background:#2b3145; }
+  .sl { margin:9px 0; }
+  .sl label { font-size:12px; display:flex; justify-content:space-between; color:var(--ink); }
+  .sl label b { color:var(--muted); font-weight:600; font-variant-numeric:tabular-nums; }
+  .sl input[type=range]{ width:100%; accent-color:var(--blue); }
+  .note { font-size:11px; color:var(--warn); margin-top:8px; }
+</style>
+</head>
+<body>
+  <div id="head">
+    <h1>Cascade-mediated recruitment swarm — Lévy exploration + LTM recruitment on a torus</h1>
+    <p class="sub">Inactive agents explore by Lévy flights; agents recruited by a linear-threshold
+       cascade (fraction rule <i>a/k&nbsp;&ge;&nbsp;&theta;</i>) converge toward their recruiting
+       parents — flowing toward the seed nodes on each resource. Blocking is emergent: crowding raises
+       degree, drops <i>a/k</i> below <i>&theta;</i>, and releases agents back to exploration, balancing
+       exploration and exploitation. Sliders push the swarm out of the cascade window.</p>
+    <p class="sub">The three presets are derived from a 4096-run global sweep over all 14 controls:
+       each is the median of the top ~2% of <i>actual joint settings</i> (not the best value of each
+       slider taken separately, which produces a frozen swarm that scores well by doing nothing), with
+       a throughput floor so "efficient" cannot mean "inactive". The spread is roughly <b>1000×</b> in
+       <b>steps per target consumed</b>, dominated by the Lévy exponent <b>α</b>: wild superdiffusive
+       jumps (α&nbsp;≈&nbsp;0.55, <i>Worst</i>) make agents overshoot everything, while
+       α&nbsp;≈&nbsp;1.65 (<i>Best movement</i>) is far cheaper.
+       Movement and communication optimise in <i>genuinely different</i> regimes, so there are two
+       "best" buttons and the costs are never summed. <b>Best movement</b> wants near-Brownian search
+       on a well-connected graph; <b>Best comms</b> wants a sparser graph (ρ<sub>r</sub>≈1.4 vs 3.6) so
+       cascades stay local — and pays with ~3× the movement. Note that <b>bits/target is largely a
+       clock</b>: presence beacons fire once per agent per tick whatever the swarm does, so total
+       bits is ~93% determined by how long the job takes. The recruitment-specific cost is the
+       <b>activation</b> channel, which is density dependent and traces the cascade inverted-U —
+       watch that tile to see what recruiting actually costs.</p>
+  </div>
+
+  <div id="app">
+    <div id="torusWrap">
+      <svg id="canvas" width="640" height="640"></svg>
+      <div id="badge">—</div>
+      <div id="legend">
+        <span><span class="dot" style="background:#d94f3d"></span>exploring (Lévy)</span>
+        <span><span class="dot" style="background:#f0a92e"></span>seed (harvesting)</span>
+        <span><span class="dot" style="background:#37c26b"></span>recruited (cascade)</span>
+        <span><span class="ln"></span>proximity graph &nbsp; <span class="ln" style="border-color:#37c26b"></span>recruited link</span>
+      </div>
+    </div>
+
+    <div id="figs">
+      <div class="panel">
+        <h2>Live metrics</h2>
+        <div class="metrics">
+          <div class="metric"><span class="v" id="mDeg">–</span><span class="k">mean degree z</span></div>
+          <div class="metric"><span class="v" id="mCasc">–</span><span class="k">recruited (cascade)</span></div>
+          <div class="metric"><span class="v" id="mAct">–</span><span class="k">active fraction</span></div>
+          <div class="metric"><span class="v" id="mBlock">–</span><span class="k">blocked fraction</span></div>
+          <div class="metric"><span class="v" id="mPsi">–</span><span class="k">Ψ largest cluster</span></div>
+          <div class="metric"><span class="v" id="mSpt">–</span><span class="k">steps / target ↓</span></div>
+          <div class="metric"><span class="v" id="mBpt">–</span><span class="k">bits / target ↓ (≈ time)</span></div>
+          <div class="metric"><span class="v" id="mApt">–</span><span class="k">activation / target ↓</span></div>
+          <div class="metric"><span class="v" id="mRpn">–</span><span class="k">targets/tick/agent ↑</span></div>
+          <div class="metric"><span class="v" id="mTgt">–</span><span class="k">targets consumed</span></div>
+          <div class="metric"><span class="v" id="mSplit">–</span><span class="k">move: explore/travel/exploit</span></div>
+        </div>
+        <div id="regimeNote"></div>
+      </div>
+
+      <div id="plotgrid">
+        <div class="card"><h3><span>Explore / exploit balance over time</span><b id="bBal"></b></h3>
+          <canvas id="pIU" width="500" height="220"></canvas></div>
+        <div class="card"><h3><span>Cascade size over time (bursts)</span><b id="bEff"></b></h3>
+          <canvas id="pEff" width="500" height="220"></canvas></div>
+        <div class="card"><h3><span>Local criticality: cluster-size CCDF (log-log)</span><b id="bCrit"></b></h3>
+          <canvas id="pCrit" width="500" height="220"></canvas></div>
+        <div class="card"><h3><span>Self-limitation: cascade frac (t) → blocked frac (t+1)</span><b id="bLag"></b></h3>
+          <canvas id="pTs" width="500" height="220"></canvas></div>
+        <div class="card"><h3><span>Targets consumed over time</span><b id="bPar"></b></h3>
+          <canvas id="pPar" width="500" height="220"></canvas></div>
+      </div>
+    </div>
+
+    <div class="panel" id="controls">
+      <h2>Parameters</h2>
+      <div class="btns"><button id="btnStart">Pause</button><button id="btnReset">Reset</button></div>
+      <div class="btns"><button id="btnSub">Below percolation</button><button id="btnWindow">Cascade window</button><button id="btnBlocked">Blocked (dense)</button><button id="btnBrown">Brownian search</button><button id="btnBalanced">Balanced forager</button></div>
+      <div class="btns"><button id="btnBestMove">Best movement</button><button id="btnBestComm">Best comms</button><button id="btnBestRate">Best rate</button><button id="btnWorst">Worst regime</button></div>
+      <div id="sliderHost"></div>
+      <div class="note">Interactive companion to the paper. Drag a slider or click a preset to push
+        the swarm across the cascade window — below percolation (no recruitment), inside the window
+        (efficient explore/exploit balance), and into blocking (over-connected).</div>
+    </div>
+  </div>
+
+<script>
+// ---------- dimensionless controls; BEST-regime defaults from our sim results ----------
+// z = p·N·π·(r/L)² ≈ 6.4 at these defaults (inverted-U peak, between zₚ≈4.5 and 2/θ≈11), with
+// sparse+clustered resources (the Q4 efficiency optimum where recruitment pays most).
+const P = {
+  N:      {v:104,  min:5,  max:200, step:1,    label:"Agents (N)"},
+  M:      {v:27,   min:1,  max:60,  step:1,    label:"Resource patches (M)"},
+  S:      {v:39,   min:2,  max:40,  step:1,    label:"Patch size (S)"},
+  patch:  {v:60,   min:5,  max:320, step:5,    label:"Patch clumping radius (·=diffuse)"},
+  radius: {v:118,  min:8,  max:340, step:2,    label:"Communication radius (r)"},
+  p:      {v:0.70, min:0.05,max:1,  step:0.05, label:"Edge probability (p)"},
+  theta:  {v:0.27, min:0.02,max:0.6,step:0.01, label:"LTM threshold mean (θ)"},
+  tspread:{v:0,    min:0,   max:0.3, step:0.01, label:"Threshold spread (σ; 0 = homogeneous)"},
+  alpha:  {v:1.65, min:0.4,max:1.99,step:0.05, label:"Lévy exponent α (0.4 wild jumps → 2.0 Brownian)"},
+  vstep:  {v:22,   min:1,  max:60,  step:1,    label:"Exploration step scale"},
+  exploit:{v:1.4,  min:0.2,max:15,  step:0.2,  label:"Exploit (recruited) step"},
+  pull:   {v:0.03, min:0,  max:0.5, step:0.01, label:"Convergence pull toward parents"},
+  cons:   {v:1.0,  min:0.1,max:4,   step:0.1,  label:"Consumption rate"},
+  cap:    {v:40,   min:5,  max:120, step:5,    label:"Patch capacity (depletes → respawns)"},
+  speed:  {v:20,   min:1,  max:120, step:1,    label:"Sim speed (ticks/sec)"},
+};
+const DEFAULTS = JSON.parse(JSON.stringify(P));
+// ---------- regime presets, DERIVED from Code/sweeps/phase_space.csv (4096-run global sweep) ------
+// Both presets are the per-axis bin-medians that minimise / maximise the metric this demo actually
+// displays: steps per target consumed. Bin medians are used rather than single best/worst runs to
+// avoid winner's-curse extremes. Mapping to sliders uses L=640: r = L*sqrt(rho_r/N),
+// S = L*sqrt(phi/M), patch = patchiness*L, exploit = ars_ratio*vstep.
+//
+// BEST  (median ~55-95 steps/target): alpha 1.83, phi 0.108, rho_r 7.0, ars 0.042, theta 0.09,
+//        pull 0.118, patchiness 0.036, K 53, N 92, p 0.63.
+// WORST (median ~105,000 steps/target -- a ~1000x spread): alpha 0.558 dominates; also phi 0.004
+//        (sparse), rho_r 0.77, ars 0.684, theta 0.41, pull 0.453, K 10, N 211, p 0.33.
+// NOTE the direction: catastrophic cost comes from WILD LEVY JUMPS (low alpha), not high alpha.
+// Communication cost optimises elsewhere (theta 0.41, rho_r 0.77, alpha 0.56) -- the two axes are
+// incommensurate, so BEST here is the MOVEMENT optimum and bits/target will not be at its minimum.
+// BEST_COMM -- the communication optimum, rho_r 1.44, phi 0.118, theta 0.272, alpha 1.166,
+//   ars 0.113, pull 0.106, patchiness 0.035, N 89, K 37, p 0.605. Verified 146.8 bits/target
+//   (vs 245.6 for BEST_MOVE) but 43.5 steps/target (vs 13.4) -- it buys cheap communication with
+//   3x the movement. A sparser graph means cascades stay small, so fewer activation pings.
+const BEST_COMM = JSON.parse(JSON.stringify(DEFAULTS));
+BEST_COMM.N.v      = 89;    // fewer agents -> fewer "I am here" beacons per tick
+BEST_COMM.M.v      = 37;
+BEST_COMM.S.v      = 36;    // phi ~0.118
+BEST_COMM.radius.v = 82;    // rho_r ~1.44: sparse graph, cascades stay local
+BEST_COMM.p.v      = 0.60;
+BEST_COMM.alpha.v  = 1.15;
+BEST_COMM.patch.v  = 20;    // patchiness ~0.035
+BEST_COMM.exploit.v= 2.4;   // ars ~0.113
+BEST_COMM.pull.v   = 0.11;
+
+// BEST_RATE -- maximises PER-CAPITA productivity (targets/tick/agent), a different objective from
+//   cost-per-target: it asks how productive each agent is, not what a target costs. Derived from the
+//   same sweep: rho_r 3.204, phi 0.111, theta 0.245, alpha 1.105, ars 0.110, pull 0.144, patchiness
+//   0.098, N 99, K 35, p 0.659 (13x the typical per-node rate). Expect it to sit close to BEST_COMM:
+//   per-node rate and bits-efficiency are rho=0.98 correlated, because beacons are a clock so
+//   "fast" and "cheap comms" are nearly the same objective.
+const BEST_RATE = JSON.parse(JSON.stringify(DEFAULTS));
+BEST_RATE.N.v      = 99;
+BEST_RATE.M.v      = 35;
+BEST_RATE.S.v      = 36;    // phi ~0.111
+BEST_RATE.radius.v = 116;   // rho_r ~3.20
+BEST_RATE.p.v      = 0.65;
+BEST_RATE.theta.v  = 0.25;
+BEST_RATE.alpha.v  = 1.10;
+BEST_RATE.patch.v  = 60;    // patchiness ~0.098
+BEST_RATE.exploit.v= 2.4;   // ars ~0.110
+BEST_RATE.pull.v   = 0.14;
+
+// ---------- BEHAVIOUR presets: show distinct DYNAMICS, not cost optima ----------
+// Cost-optimal settings converge on "don't take long jumps" (that is why alpha~1.65 wins on
+// steps/target), which makes for a visually dead demo. These four instead hold the resource field and
+// alpha~1 fixed -- so Levy flights stay visible -- and move ONLY connectivity z, which is what the
+// cascade window is about. With theta=0.18: percolation z_c~4.5, blocking bound 2/theta=11.1.
+const BEHAV = {};                    // sparse + clumped resources, visible Levy search
+const BASE_B = {N:90, M:16, S:12, patch:16, p:1.0, theta:0.18, alpha:1.0,
+                vstep:22, exploit:3, pull:0.12, cap:40, cons:1.0, tspread:0};
+function mkBehav(name, over){
+  const o = JSON.parse(JSON.stringify(DEFAULTS));
+  Object.entries({...BASE_B, ...over}).forEach(([k,v])=>{ if(o[k]) o[k].v=v; });
+  BEHAV[name]=o; return o;
+}
+// z~2: below percolation -- cascades die at birth, agents forage independently by Levy flight.
+// This is the no-recruitment limit: pure search, long jumps, no green clusters.
+mkBehav("sub",    {radius:54});
+// z~7: INSIDE the cascade window (4.5 < z < 11.1) -- the paper's regime. Cascades percolate, agents
+// converge on finds, crowding then drops a/k below theta and releases them back to exploring.
+mkBehav("window", {radius:101});
+// z~25: far above 2/theta -- graph so dense that a/k rarely reaches theta. Recruitment is BLOCKED,
+// beacons are paid anyway. The upper bound of the window.
+mkBehav("blocked",{radius:190});
+// Same connectivity as the window, but alpha->2: search is Brownian, no long jumps. Contrast this
+// with "Cascade window" to see what heavy-tailed exploration actually buys.
+mkBehav("brown",  {radius:101, alpha:1.95});
+// BALANCED FORAGER -- derived from the sweep by asking for all of: a real explore/exploit split
+// (active fraction 0.30-0.65 AND >=35% of movement still spent searching), SPARSE resources (phi in
+// the bottom 40%), SCATTERED "lonely" targets (few sources per clump), and then the best per-capita
+// consumption rate within that set. Result: theta 0.217, rho_r 3.41, phi 0.007, patchiness 0.082,
+// alpha 0.906, ars 0.051, pull 0.336, N 103, K 15, p 0.614.
+//   Measured: active 0.51, explore-share 0.50, z=6.0 (inside the cascade window 4.5-9.2), blocked 0.03.
+//   NOTE the alpha: when targets are sparse and scattered the sweep picks HEAVY-TAILED search
+//   (alpha~0.91), whereas the abundant-resource optimum picked alpha~1.66. That is the classic Levy
+//   foraging result recovered from our own data -- and it is the regime where long jumps earn their keep.
+// radius 84, NOT the 116 that the nominal formula gives: measured z runs ~1.8x above nominal because
+// agents cluster spatially. At 116 the swarm sat at measured z=11.5 -- above the blocking bound
+// 2/theta=9.1 -- so it was 25% blocked and only 11% active, the opposite of balanced.
+mkBehav("balanced",{N:103, M:15, S:14, patch:50, radius:84, p:0.60,
+                    theta:0.22, alpha:0.90, exploit:1.2, pull:0.34});
+
+const WORST = JSON.parse(JSON.stringify(DEFAULTS));
+WORST.alpha.v  = 0.55;   // wild superdiffusive jumps: agents overshoot everything (dominant effect)
+WORST.N.v      = 200;    // large swarm, sparse graph
+WORST.M.v      = 10;     // few patches
+WORST.S.v      = 13;     // small patches -> phi ~ 0.004, resource-starved
+WORST.patch.v  = 10;     // patchiness ~0.016
+WORST.radius.v = 39;     // rho_r ~0.77: below percolation, cascades cannot spread
+WORST.p.v      = 0.35;   // sparse edges on top
+WORST.theta.v  = 0.41;   // high threshold: recruitment rarely triggers
+WORST.exploit.v= 15;     // ars 0.68: "local" search is nearly as large as exploration
+WORST.pull.v   = 0.45;   // over-aggressive convergence
+const L = 640;                                   // torus side (canvas px)
+const svg = d3.select("#canvas");
+svg.append("g").attr("id","gPatch"); svg.append("g").attr("id","gEdge"); svg.append("g").attr("id","gAgent");
+
+// ---------- slider UI ----------
+const host = d3.select("#sliderHost");
+Object.entries(P).forEach(([key,o])=>{
+  const w=host.append("div").attr("class","sl"), lab=w.append("label");
+  lab.append("span").text(o.label); lab.append("b").attr("id","b_"+key).text(o.v);
+  w.append("input").attr("type","range").attr("min",o.min).attr("max",o.max).attr("step",o.step)
+    .attr("value",o.v).attr("id","s_"+key)
+    .on("input",function(){ o.v=+this.value; d3.select("#b_"+key).text(o.v);
+       if(key==="N") syncAgents(); if(key==="M") syncPatches();
+       if(["radius","p","N","theta"].includes(key)) updateBadge(); })
+    .on("change", clearLedgers);                 // fresh measurement per configuration
+});
+
+// ---------- math helpers ----------
+function randn(){ let u,v; do{u=Math.random()}while(!u); do{v=Math.random()}while(!v);
+  return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v); }
+function gamma(z){ if(z<0.5) return Math.PI/(Math.sin(Math.PI*z)*gamma(1-z));
+  z-=1; const g=7,c=[0.99999999999980993,676.5203681218851,-1259.1392167224028,771.32342877765313,
+    -176.61502916214059,12.507343278686905,-0.13857109526572012,9.9843695780195716e-6,1.5056327351493116e-7];
+  let x=c[0]; for(let i=1;i<g+2;i++) x+=c[i]/(z+i); const t=z+g+0.5;
+  return Math.sqrt(2*Math.PI)*Math.pow(t,z+0.5)*Math.exp(-t)*x; }
+// Heavy-tailed step LENGTH only (|alpha-stable|). Direction is applied separately, so exploring and
+// recruited agents draw from the SAME length law and differ only in heading -- recruitment informs
+// direction, never step size. (The old per-component draw biased jumps along the x/y axes.)
+function levyLen(){ const a=Math.min(Math.max(P.alpha.v,0.5),1.99);
+  const sn=Math.pow(gamma(1+a)*Math.sin(Math.PI*a/2),1/a);
+  const sd=Math.pow(gamma((1+a)/2)*a*Math.pow(2,(a-1)/2),1/a);
+  const u=(sn/sd)*randn(), w=Math.abs(randn()); return Math.abs(u/Math.pow(w,1/a))*P.vstep.v/10; }
+const wrap = x => ((x%L)+L)%L;
+function tdist(ax,ay,bx,by){ let dx=Math.abs(ax-bx),dy=Math.abs(ay-by);
+  dx=Math.min(dx,L-dx); dy=Math.min(dy,L-dy); return Math.hypot(dx,dy); }
+function tdelta(a,b){ let d=b-a; if(d>L/2)d-=L; if(d<-L/2)d+=L; return d; }   // signed min-image a→b
+// per-agent LTM threshold ~ N(theta, tspread); tspread=0 -> homogeneous (all agents identical)
+function sampleTheta(){ const s=P.tspread.v;
+  return Math.min(Math.max(P.theta.v + (s>0 ? randn()*s : 0), 0.02), 0.95); }
+function newAgent(){ return {x:Math.random()*L, y:Math.random()*L, active:false, seed:false,
+                             theta:sampleTheta()}; }
+
+// ---------- state ----------
+let agents=[], patches=[], hubs=[], edgeList=[];
+let lagPts=[], tsExp=[], tsRec=[], tsSeed=[], tsTgt=[];
+let cum={move:0,comm:0,harv:0,bec:0,act:0,explore:0,converge:0,exploit:0,ticks:0}, ema={move:0,comm:0,harv:0};
+let histPts=[], maxEff=1e-9, sizeHist={}, tsCasc=[], tsRev=[], running=true, timer=null;
+
+function clearLedgers(){ cum={move:0,comm:0,harv:0,bec:0,act:0,explore:0,converge:0,exploit:0,ticks:0}; ema={move:0,comm:0,harv:0};
+  histPts=[]; maxEff=1e-9; sizeHist={}; tsCasc=[]; tsRev=[]; }
+function syncAgents(){ const n=Math.round(P.N.v);
+  while(agents.length<n) agents.push(newAgent());
+  if(agents.length>n) agents.length=n; }
+function placePatches(){
+  hubs=Array.from({length:Math.max(1,Math.round(P.M.v/4))},()=>({x:Math.random()*L,y:Math.random()*L}));
+  patches=Array.from({length:P.M.v},()=>{ const h=hubs[Math.floor(Math.random()*hubs.length)];
+    return {x:wrap(h.x+randn()*P.patch.v),y:wrap(h.y+randn()*P.patch.v),cap:P.cap.v,r0:P.S.v}; }); }
+function syncPatches(){ const m=Math.round(P.M.v);
+  while(patches.length<m){ const h=hubs[Math.floor(Math.random()*hubs.length)];
+    patches.push({x:wrap(h.x+randn()*P.patch.v),y:wrap(h.y+randn()*P.patch.v),cap:P.cap.v,r0:P.S.v}); }
+  if(patches.length>m) patches.length=m; }
+function reset(){ placePatches();
+  agents=Array.from({length:P.N.v},()=>newAgent());
+  clearLedgers(); draw(); updateBadge(); }
+
+function activeComponents(active,nb){                 // sizes of connected components of active subgraph
+  const N=active.length, seen=new Array(N).fill(false), out=[];
+  for(let i=0;i<N;i++){ if(!active[i]||seen[i]) continue; let sz=0; const st=[i]; seen[i]=true;
+    while(st.length){ const u=st.pop(); sz++; for(const v of nb[u]) if(active[v]&&!seen[v]){ seen[v]=true; st.push(v); } }
+    out.push(sz); }
+  return out; }
+
+// ---------- one simulation tick ----------
+function step(){
+  const N=agents.length;
+  const lastActive=agents.map(a=>!!a.active);
+  let moveTick=0;
+  // TICK ORDER MATCHES mobile_cascade.py step(): seed -> graph -> cascade -> deplete -> move.
+  // (The JS previously moved FIRST and then converged as an extra displacement, so recruited
+  //  agents moved twice per tick and the distance ledger over-counted. Python applies exactly one
+  //  step per agent per tick: torch.where(move_mask, mean_disp*pull, step_vec) REPLACES.)
+  // 1) SEED: agents on a live patch become seeds and consume it
+  const seed=new Array(N).fill(false); let harvTick=0;
+  for(let i=0;i<N;i++) for(const pt of patches)
+    if(pt.cap>0 && tdist(agents[i].x,agents[i].y,pt.x,pt.y)<=pt.r0){
+      seed[i]=true; const take=Math.min(P.cons.v,pt.cap); pt.cap-=take; harvTick+=take; break; }
+  for(const pt of patches) if(pt.cap<=0){ const h=hubs[Math.floor(Math.random()*hubs.length)];
+    pt.x=wrap(h.x+randn()*P.patch.v); pt.y=wrap(h.y+randn()*P.patch.v); pt.cap=P.cap.v; }
+  // 2) GRAPH: proximity graph (radius r, edge prob p)
+  const nb=Array.from({length:N},()=>[]); let edges=0; edgeList=[];
+  for(let i=0;i<N;i++) for(let j=i+1;j<N;j++)
+    if(tdist(agents[i].x,agents[i].y,agents[j].x,agents[j].y)<=P.radius.v && Math.random()<P.p.v){
+      nb[i].push(j); nb[j].push(i); edges++; edgeList.push([i,j]); }
+  // 3) CASCADE to fixed point, recording PARENTS (recruiters active when each agent crosses θ)
+  const active=seed.slice(), parents=Array.from({length:N},()=>null);
+  for(let iter=0;iter<N;iter++){ const newly=[];
+    for(let i=0;i<N;i++){ if(active[i]) continue; const k=nb[i].length; if(k===0) continue;
+      const rec=[]; for(const j of nb[i]) if(active[j]) rec.push(j);
+      if(rec.length/k>=agents[i].theta) newly.push([i,rec]); }
+    if(newly.length===0) break; for(const [i,rec] of newly){ active[i]=true; parents[i]=rec; } }
+  // 4) MOVE — exactly ONE step per agent, three mutually exclusive modes (as in Python):
+  //      ON FOOD (seed)      -> area-restricted search: small isotropic Brownian step
+  //      RECRUITED, off food -> Levy flight with heading toward the parent centroid (transitively
+  //                             toward the seed) -- same length law as exploration, informed direction
+  //      EXPLORING           -> Levy flight in a random direction
+  //    So recruitment changes only the DIRECTION of search, not the step size. (The previous version
+  //    drifted recruited agents a tiny pull-fraction toward one-hop recruiters -- a near-freeze.)
+  //    Positions are snapshotted first so headings are synchronous (all agents see the same
+  //    pre-move configuration), matching the batched tensor update.
+  const px=agents.map(a=>a.x), py=agents.map(a=>a.y);
+  let dExplore=0,dConverge=0,dExploit=0;
+  for(let i=0;i<N;i++){ const par=parents[i]; let dx,dy;
+    if(seed[i]){                                    // ARS on food: small Brownian
+      dx=randn()*P.exploit.v; dy=randn()*P.exploit.v; dExploit+=Math.hypot(dx,dy);
+    } else if(active[i] && par && par.length){       // recruited: Levy length, cascade heading
+      let mdx=0,mdy=0; for(const j of par){ mdx+=tdelta(px[i],px[j]); mdy+=tdelta(py[i],py[j]); }
+      const m=Math.hypot(mdx,mdy), len=levyLen();
+      if(m>1e-9){ dx=len*mdx/m; dy=len*mdy/m; } else { const th=Math.random()*2*Math.PI; dx=len*Math.cos(th); dy=len*Math.sin(th); }
+      dConverge+=Math.hypot(dx,dy);
+    } else {                                         // exploring: Levy length, random heading
+      const th=Math.random()*2*Math.PI, len=levyLen(); dx=len*Math.cos(th); dy=len*Math.sin(th);
+      dExplore+=Math.hypot(dx,dy);
+    }
+    agents[i].x=wrap(px[i]+dx); agents[i].y=wrap(py[i]+dy); moveTick+=Math.hypot(dx,dy);
+    agents[i].active=active[i]; agents[i].seed=seed[i]; }
+  // 5) OBSERVABLES
+  let nActive=0,nSeed=0,blocked=0;
+  for(let i=0;i<N;i++){ if(active[i]){ nActive++; if(seed[i])nSeed++; }
+    else { const k=nb[i].length; if(k>0){ let a=0; for(const j of nb[i]) if(active[j])a++;
+      if(a>0 && a/k<agents[i].theta) blocked++; } } }        // has active neighbours but suppressed by degree
+  let reverted=0; for(let i=0;i<N;i++) if(lastActive[i] && !active[i]) reverted++;
+  const cascadeSize=nActive-nSeed, z=2*edges/N, casc=nActive/N;
+  const sizes=activeComponents(active,nb), largest=sizes.length?Math.max(...sizes):0;
+  for(const s of sizes) sizeHist[s]=(sizeHist[s]||0)+1;
+  // Communication ledger — NODE-based, matching mobile_cascade.py and the two-ping spec:
+  //   beacon     "I am here"        -> every agent, every tick            => N
+  //   activation "I found a target" -> one per active agent in the cascade => nActive
+  // (was 2*edges + sum-of-active-degrees, an EDGE count, which inflated comm with connectivity
+  //  and made bits/target incomparable with the Python sweeps.)
+  const beaconTick=N, activationTick=nActive, commTick=beaconTick+activationTick;
+  cum.move+=moveTick; cum.comm+=commTick; cum.harv+=harvTick;
+  cum.bec+=beaconTick; cum.act+=activationTick; cum.ticks+=1;
+  cum.explore+=dExplore; cum.converge+=dConverge; cum.exploit+=dExploit;
+  const A=0.06; ema.move=(1-A)*ema.move+A*moveTick; ema.comm=(1-A)*ema.comm+A*commTick; ema.harv=(1-A)*ema.harv+A*harvTick;
+  const cost=ema.move+ema.comm, eff=ema.harv/Math.max(cost,1e-6); maxEff=Math.max(maxEff,eff);
+  // COST PER JOB (the metric the paper uses; harvest/cost was retracted -- a fixed-horizon ratio
+  // rewards inactivity, and it sums metres with messages). One "target" = one patch-equivalent
+  // consumed = cum.harv / capacity, exactly as in mobile_cascade.py.
+  const tgts = cum.harv / Math.max(P.cap.v,1e-9);
+  const stepsPerTgt = tgts>0 ? (cum.move/P.vstep.v)/tgts : NaN;   // in exploration-step units
+  const bitsPerTgt  = tgts>0 ?  cum.comm/tgts            : NaN;
+  // Split the channels: BEACONS are a clock -- one per agent per tick regardless of behaviour
+  // (measured constant at 121/tick across the whole connectivity range, rank corr -0.001 with z), so
+  // bits/target is ~93% determined by runtime. ACTIVATION is the recruitment-specific channel: it is
+  // density dependent (corr +0.42 with z) and traces the cascade inverted-U. Watch this one to see
+  // what recruitment actually costs.
+  const actPerTgt   = tgts>0 ?  cum.act/tgts             : NaN;
+  // PER-CAPITA productivity: targets consumed per tick per agent. This is a different kind of
+  // efficiency from cost-per-target -- it asks how productive each agent is rather than what a
+  // target costs. Note it is ~rank-equivalent to bits-efficiency (rho=0.98 in the sweep) precisely
+  // because the beacon channel is a clock, so "cheap comms" and "fast" are nearly the same thing.
+  const ratePerNode = cum.ticks>0 ? tgts/cum.ticks/Math.max(N,1) : NaN;
+  const mTot = Math.max(cum.explore+cum.converge+cum.exploit,1e-9);
+  histPts.push({z, casc:cascadeSize/N, eff, cost, harv:ema.harv, spt:stepsPerTgt, apt:actPerTgt}); if(histPts.length>600) histPts.shift();
+  tsCasc.push(cascadeSize); if(tsCasc.length>200) tsCasc.shift();
+  // time-domain traces: this demo is for WATCHING one setting, so the panels show how the swarm
+  // cycles rather than how it responds to parameters (which needs a sweep and belongs in the paper).
+  tsExp.push((N-nActive)/N); tsRec.push(cascadeSize/N); tsSeed.push(nSeed/N); tsTgt.push(tgts);
+  [tsExp,tsRec,tsSeed,tsTgt].forEach(a=>{ if(a.length>200) a.shift(); });
+  // Lagged pair: cascade size at t vs BLOCKED count at t+1. Overlapping spiky traces only showed that
+  // both are bursty; this tests the paper's actual claim -- that a large cascade CAUSES the blocking
+  // that then releases agents back to exploring. A positive trend is the self-limitation signature.
+  if(window._prevCasc!=null) lagPts.push({c:window._prevCasc/N, b:blocked/N});
+  if(lagPts.length>400) lagPts.shift();
+  window._prevCasc=cascadeSize;
+  tsRev.push(reverted); if(tsRev.length>200) tsRev.shift();
+  window._live={ z, recr:cascadeSize/N, act:casc, blocked:blocked/N, psi:largest/N,
+    eff, effPct:eff/maxEff, stepsPerTgt, bitsPerTgt, actPerTgt, ratePerNode, tgts,
+    fExplore:cum.explore/mTot, fConverge:cum.converge/mTot, fExploit:cum.exploit/mTot };
+}
+
+// ---------- rendering: torus ----------
+function draw(){
+  const gp=d3.select("#gPatch"), ge=d3.select("#gEdge"), ga=d3.select("#gAgent");
+  const pj=gp.selectAll("circle").data(patches);
+  pj.enter().append("circle").merge(pj).attr("cx",d=>d.x).attr("cy",d=>d.y).attr("r",d=>d.r0)
+    .attr("fill","#2b3140").attr("opacity",d=>0.20+0.5*Math.max(0,d.cap)/P.cap.v);
+  pj.exit().remove();
+  // TOROIDAL edges: draw via min-image; wrapping edges become two half-segments crossing the seam
+  const segs=[];
+  for(const [i,j] of edgeList){ const ax=agents[i].x,ay=agents[i].y,bx=agents[j].x,by=agents[j].y;
+    const dx=tdelta(ax,bx), dy=tdelta(ay,by), act=agents[i].active&&agents[j].active;
+    const ex=ax+dx, ey=ay+dy;
+    if(ex>=0&&ex<=L&&ey>=0&&ey<=L){ segs.push({x1:ax,y1:ay,x2:bx,y2:by,act}); }
+    else { segs.push({x1:ax,y1:ay,x2:ex,y2:ey,act}); segs.push({x1:bx,y1:by,x2:bx-dx,y2:by-dy,act}); } }
+  const ej=ge.selectAll("line").data(segs);
+  ej.enter().append("line").merge(ej)
+    .attr("x1",d=>d.x1).attr("y1",d=>d.y1).attr("x2",d=>d.x2).attr("y2",d=>d.y2)
+    .attr("stroke",d=>d.act?"#37c26b":"#aeb7c6").attr("stroke-opacity",d=>d.act?0.6:0.22).attr("stroke-width",1);
+  ej.exit().remove();
+  const aj=ga.selectAll("circle").data(agents);
+  aj.enter().append("circle").attr("r",4.3).merge(aj).attr("cx",d=>d.x).attr("cy",d=>d.y)
+    .attr("fill",d=> d.seed?"#f0a92e" : d.active?"#37c26b" : "#d94f3d");
+  aj.exit().remove();
+}
+
+// ---------- rendering: plots ----------
+function ctxOf(id){ const cv=document.getElementById(id), c=cv.getContext("2d");
+  c.clearRect(0,0,cv.width,cv.height); return [c,cv.width,cv.height]; }
+function axis(c,W,H){ c.strokeStyle="#2a2f3a"; c.lineWidth=1; c.beginPath(); c.moveTo(0,H-1); c.lineTo(W,H-1); c.stroke(); }
+function scatter(id,pts,xf,yf,o){ const [c,W,H]=ctxOf(id); const pad=6;
+  o=o||{}; const xs=pts.map(xf), ys=pts.map(yf);
+  // Optional LOG axes: cumulative cost quantities span decades (the early transient, when almost no
+  // targets have been consumed, is enormous and otherwise compresses every later point onto one line).
+  const lx=!!o.logx, ly=!!o.logy;
+  const tx=v=>lx?Math.log10(Math.max(v,1e-9)):v, ty=v=>ly?Math.log10(Math.max(v,1e-9)):v;
+  const fx=pts.map(p=>tx(xf(p))), fy=pts.map(p=>ty(yf(p)));
+  const xmin=lx?Math.min(...fx,Infinity):0, ymin=ly?Math.min(...fy,Infinity):0;
+  const xmax=lx?Math.max(...fx,-Infinity):(o.xmax!=null?o.xmax:Math.max(1e-9,...xs)*1.1);
+  const ymax=ly?Math.max(...fy,-Infinity):(o.ymax!=null?o.ymax:Math.max(1e-9,...ys)*1.1);
+  const sx=(xmax-xmin)||1, sy=(ymax-ymin)||1;
+  const X=v=>pad+((tx(v)-xmin)/sx)*(W-2*pad), Y=v=>H-pad-((ty(v)-ymin)/sy)*(H-2*pad);
+  if(o.shade){ c.fillStyle="rgba(55,194,107,0.10)"; c.fillRect(X(o.shade[0]),0,Math.max(0,X(o.shade[1])-X(o.shade[0])),H); }
+  axis(c,W,H); const n=pts.length;
+  pts.forEach((p,i)=>{ c.globalAlpha=0.10+0.5*(i/(n-1||1)); c.fillStyle=o.color||"#5b8def";
+    c.beginPath(); c.arc(X(xf(p)),Y(yf(p)),2,0,7); c.fill(); });
+  c.globalAlpha=1;
+  // connect swept points in order -- a curve, not a cloud
+  if(o.line && n>1){ c.strokeStyle=o.color||"#5b8def"; c.lineWidth=1.8; c.beginPath();
+    pts.forEach((p,i)=>{ const x=X(xf(p)),y=Y(yf(p)); i?c.lineTo(x,y):c.moveTo(x,y); }); c.stroke(); }
+  // binned mean: a raw cloud hides a trend that binning makes obvious (or proves absent)
+  if(o.bin && n>20){
+    const NB=12, sum=new Array(NB).fill(0), cnt=new Array(NB).fill(0);
+    pts.forEach(p=>{ const v=xf(p), b=Math.min(NB-1,Math.max(0,Math.floor(v/(o.xmax||1)*NB)));
+      sum[b]+=yf(p); cnt[b]++; });
+    c.strokeStyle="#f0a92e"; c.lineWidth=2; c.beginPath(); let started=false;
+    for(let b=0;b<NB;b++){ if(cnt[b]<3) continue;
+      const x=X((b+0.5)/NB*(o.xmax||1)), y=Y(sum[b]/cnt[b]);
+      started?c.lineTo(x,y):c.moveTo(x,y); started=true; }
+    c.stroke();
+  }
+  if(n && !o.line){ const p=pts[n-1]; c.fillStyle="#f0a92e"; c.beginPath(); c.arc(X(xf(p)),Y(yf(p)),4.5,0,7); c.fill(); } }
+function loglog(id,hist,color){ const [c,W,H]=ctxOf(id); const pad=8;
+  const ks=Object.keys(hist).map(Number).filter(k=>k>=1).sort((a,b)=>a-b);
+  if(ks.length<2){ axis(c,W,H); return; }
+  const tot=ks.reduce((s,k)=>s+hist[k],0); let cum=0; const pts=[];   // CCDF P(S≥s)
+  const kmax=ks[ks.length-1]; for(const k of ks){ const ccdf=(tot-cum)/tot; pts.push([Math.log10(k),Math.log10(ccdf)]); cum+=hist[k]; }
+  const xm=Math.log10(Math.max(2,kmax)), ymin=Math.min(...pts.map(p=>p[1]));
+  const X=v=>pad+(v/xm)*(W-2*pad), Y=v=>pad+((v)/(ymin))*(H-2*pad);
+  // least-squares slope of log10 CCDF vs log10 size: the power-law exponent. Reported in the header
+  // because the curve alone is unreadable without axes -- a straight line here means scale-free.
+  // Fit only the SCALING REGION: the top decade is dominated by the finite-size cutoff (visible as
+  // the cliff at the right), and including it biases the exponent steep. Also report R^2 -- without
+  // it "scale-free" is unfalsifiable, and with N~100 there is barely 1.5 decades to fit.
+  { const fit=pts.filter(q=>q[0]<=xm*0.75 && q[1]>Math.log10(0.02));
+    const n=fit.length;
+    if(n>=4){ const sx=fit.reduce((a,q)=>a+q[0],0), sy=fit.reduce((a,q)=>a+q[1],0);
+      const sxx=fit.reduce((a,q)=>a+q[0]*q[0],0), sxy=fit.reduce((a,q)=>a+q[0]*q[1],0);
+      const syy=fit.reduce((a,q)=>a+q[1]*q[1],0), den=n*sxx-sx*sx;
+      const b=den>1e-9?(n*sxy-sx*sy)/den:NaN, a0=(sy-b*sx)/n;
+      let ss=0,st=0; const my=sy/n;
+      fit.forEach(q=>{ const pr=a0+b*q[0]; ss+=(q[1]-pr)*(q[1]-pr); st+=(q[1]-my)*(q[1]-my); });
+      window._critSlope=b; window._critR2 = st>1e-12? 1-ss/st : NaN;
+    } else { window._critSlope=NaN; window._critR2=NaN; } }
+  axis(c,W,H); c.strokeStyle=color; c.lineWidth=2; c.beginPath();
+  pts.forEach((p,i)=>{ const x=X(p[0]),y=Y(p[1]); i?c.lineTo(x,y):c.moveTo(x,y); }); c.stroke();
+  c.fillStyle=color; pts.forEach(p=>{ c.beginPath(); c.arc(X(p[0]),Y(p[1]),2,0,7); c.fill(); }); }
+function tseries(id,series,ymax){ const [c,W,H]=ctxOf(id); axis(c,W,H);
+  const mx=ymax||Math.max(1,...series.flatMap(s=>s.arr));
+  for(const s of series){ if(s.arr.length<2) continue; c.strokeStyle=s.color; c.lineWidth=1.6; c.beginPath();
+    s.arr.forEach((y,i)=>{ const x=i/(s.arr.length-1)*W, py=H-2-(y/mx)*(H-4); i?c.lineTo(x,py):c.moveTo(x,py); }); c.stroke(); } }
+function fmt(x){ return x>=1e6?(x/1e6).toFixed(2)+"M":x>=1e3?(x/1e3).toFixed(1)+"k":x>=10?Math.round(x):x.toFixed(2); }
+
+// Classify from the MEASURED mean degree (2*edges/N), not the nominal p*N*pi*(r/L)^2. Agents cluster
+// spatially, so realised degree runs well above the uniform-density prediction (~1.8x in the balanced
+// preset: nominal 6.4 vs measured 11.5). Using the nominal value mislabelled a blocked swarm as
+// "under-connected" while 25% of agents were in fact blocked.
+function updateBadge(){ const zm=(window._live||{}).z;
+  const z = (zm!=null && isFinite(zm) && zm>0) ? zm : P.p.v*P.N.v*Math.PI*Math.pow(P.radius.v/L,2);
+  const zc=4.5, zb=2/P.theta.v;
+  const b=document.getElementById("badge"), note=document.getElementById("regimeNote"); let t,col,msg;
+  if(z<zc){ t="UNDER-CONNECTED"; col="var(--bad)"; msg="Fragmented graph (z < zₚ≈4.5): cascades stay local, little recruitment — mostly solo Lévy foraging."; }
+  else if(z>zb){ t="BLOCKING"; col="var(--warn)"; msg=`Over-connected (z > 2/θ≈${zb.toFixed(1)}): high degree pushes a/k below θ — recruitment blocked and communication wasted.`; }
+  else { t="CASCADE WINDOW"; col="var(--good)"; msg=`In the window (zₚ≈4.5 < z < 2/θ≈${zb.toFixed(1)}): recruitment percolates without blocking — efficient explore/exploit balance.`; }
+  b.textContent=`${t}  (z≈${z.toFixed(1)})`; b.style.background=col; note.textContent=msg; }
+
+function render(){
+  draw(); updateBadge();
+  // sweep points (one per connectivity setting, burn-in discarded) trace the actual curve; the live
+  // scatter can only ever be a blob because a single setting jitters around one z.
+  // THE core figure: the explore/exploit cycle. exploring (red) and recruited (green) should
+  // anti-correlate -- a cascade pulls agents in, crowding blocks it, and they are released back out.
+  tseries("pIU", [{arr:tsExp,color:"#d94f3d"},{arr:tsRec,color:"#37c26b"},{arr:tsSeed,color:"#f0a92e"}], 1);
+  // steps per target, NOT the retracted harvest/(move+comm): that ratio sums metres with messages
+  // and, being fixed-horizon, rewards a swarm that does nothing.
+  tseries("pEff", [{arr:tsCasc,color:"#37c26b"}]);
+  loglog("pCrit", sizeHist, "#c98cf0");
+  scatter("pTs", lagPts, p=>p.c, p=>p.b, {color:"#37c26b", bin:true, xmax:1, ymax:1});
+  { const n=lagPts.length;
+    if(n>20){ const mx=lagPts.reduce((a,q)=>a+q.c,0)/n, my=lagPts.reduce((a,q)=>a+q.b,0)/n;
+      let sxy=0,sxx=0,syy=0;
+      lagPts.forEach(q=>{const dx=q.c-mx,dy=q.b-my; sxy+=dx*dy; sxx+=dx*dx; syy+=dy*dy;});
+      const r=(sxx>0&&syy>0)? sxy/Math.sqrt(sxx*syy) : NaN;
+      document.getElementById("bLag").textContent = isFinite(r)? "r = "+r.toFixed(2) : "";
+    } }
+  // the two incommensurate costs, never summed: movement vs the recruitment-specific ping channel
+  tseries("pPar", [{arr:tsTgt,color:"#e0a13a"}]);
+  const lv=window._live||{};
+  const set=(id,v)=>document.getElementById(id).textContent=v;
+  set("mDeg",(lv.z||0).toFixed(1)); set("mCasc",((lv.recr||0)*100).toFixed(0)+"%");
+  set("mAct",((lv.act||0)*100).toFixed(0)+"%"); set("mBlock",((lv.blocked||0)*100).toFixed(0)+"%");
+  set("mPsi",(lv.psi||0).toFixed(2));
+  set("mSpt", isFinite(lv.stepsPerTgt)? fmt(lv.stepsPerTgt) : "–");
+  set("mBpt", isFinite(lv.bitsPerTgt) ? fmt(lv.bitsPerTgt)  : "–");
+  set("mApt", isFinite(lv.actPerTgt)  ? fmt(lv.actPerTgt)   : "–");
+  set("mRpn", isFinite(lv.ratePerNode)? lv.ratePerNode.toFixed(4) : "–");
+  set("mTgt", (lv.tgts||0).toFixed(1));
+  set("mSplit", `${Math.round(100*(lv.fExplore||0))}/${Math.round(100*(lv.fConverge||0))}/${Math.round(100*(lv.fExploit||0))}`);
+  document.getElementById("bEff").textContent = tsCasc.length? "peak "+Math.max(...tsCasc) : "";
+  document.getElementById("bBal").textContent =
+    `explore ${Math.round(100*(1-(lv.act||0)))}% / recruited ${Math.round(100*(lv.recr||0))}%`;
+  document.getElementById("bPar").textContent = (lv.tgts||0).toFixed(1)+" total";
+  document.getElementById("bCrit").textContent = isFinite(window._critSlope)
+    ? `slope ${window._critSlope.toFixed(2)}  R²=${(window._critR2||0).toFixed(2)}` : "";
+}
+
+// ---------- main loop / controls ----------
+function tick(){ if(running){ step(); render(); } }
+function restartTimer(){ if(timer) clearInterval(timer); timer=setInterval(tick, 1000/P.speed.v); }
+d3.select("#s_speed").on("input.timer",restartTimer);
+function applyPreset(pre){ Object.keys(P).forEach(k=>{ P[k].v=pre[k].v;
+  d3.select("#s_"+k).property("value",P[k].v); d3.select("#b_"+k).text(P[k].v); }); reset(); restartTimer(); }
+document.getElementById("btnStart").onclick=function(){ running=!running; this.textContent=running?"Pause":"Run"; };
+document.getElementById("btnReset").onclick=()=>reset();
+document.getElementById("btnBestMove").onclick=()=>applyPreset(DEFAULTS);
+document.getElementById("btnBestComm").onclick=()=>applyPreset(BEST_COMM);
+document.getElementById("btnBestRate").onclick=()=>applyPreset(BEST_RATE);
+document.getElementById("btnSub").onclick    =()=>applyPreset(BEHAV.sub);
+document.getElementById("btnWindow").onclick =()=>applyPreset(BEHAV.window);
+document.getElementById("btnBlocked").onclick=()=>applyPreset(BEHAV.blocked);
+document.getElementById("btnBrown").onclick  =()=>applyPreset(BEHAV.brown);
+document.getElementById("btnBalanced").onclick=()=>applyPreset(BEHAV.balanced);
+document.getElementById("btnWorst").onclick=()=>applyPreset(WORST);
+
+reset(); restartTimer();
+</script>
+</body>
+</html>

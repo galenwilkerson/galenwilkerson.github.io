@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<!-- Why sparse/clumped is generic: a maximum-entropy toy. Companion to
+     "Collective foraging from simple recruitment cascades." Author: Galen Wilkerson.
+     Self-contained (no dependencies). -->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Random placement is clumpy — a maximum-entropy toy</title>
+<style>
+  :root { --bg:#0f1116; --panel:#171a21; --ink:#e6e8ec; --muted:#9aa3af; --line:#2a2f3a;
+          --accent:#e07b39; --accent2:#8b2d8b; --good:#37c26b; --blue:#5b8def; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+         font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; }
+  #head { padding:18px 24px 4px; }
+  h1 { font-size:24px; margin:0 0 5px; font-weight:680; letter-spacing:-.01em; }
+  .sub { color:var(--muted); font-size:14px; margin:0 0 4px; max-width:1050px; line-height:1.5; }
+  .sub b { color:var(--ink); }
+  #app { display:flex; gap:18px; padding:12px 24px 28px; align-items:flex-start; flex-wrap:wrap; }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px 16px; }
+  .panel h2 { font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted);
+              margin:0 0 10px; font-weight:650; }
+  canvas { background:#fbfbfd; border-radius:8px; display:block; }
+  .btns { display:flex; gap:8px; flex-wrap:wrap; margin:10px 0 4px; }
+  button { background:#232838; color:var(--ink); border:1px solid var(--line); border-radius:6px;
+           padding:8px 13px; font-size:13px; cursor:pointer; }
+  button:hover { background:#2b3145; }
+  button.on { background:var(--blue); border-color:var(--blue); color:#0b0d11; font-weight:650; }
+  .stat { display:flex; gap:22px; margin-top:12px; flex-wrap:wrap; }
+  .stat .v { font-size:22px; font-weight:680; font-variant-numeric:tabular-nums; }
+  .stat .k { font-size:11px; color:var(--muted); }
+  .legend { font-size:12px; color:var(--muted); margin-top:10px; line-height:1.7; }
+  .sw { display:inline-block; width:13px; height:13px; border-radius:3px; vertical-align:middle;
+        margin-right:5px; border:1px solid #0006; }
+  .note { font-size:12px; color:var(--muted); margin-top:10px; max-width:520px; line-height:1.5; }
+  .big { color:var(--accent); font-weight:680; }
+</style>
+</head>
+<body>
+  <div id="head">
+    <h1>Random placement is clumpy — why sparse/clustered targets are <i>generic</i></h1>
+    <p class="sub">Drop <b>M</b> targets independently and uniformly into <b>K = M</b> cells (one per
+      cell <i>on average</i>). You might expect a tidy, even field. You never get one. Instead cells
+      sit empty while others stack two, three, more — the maximum-entropy state of a placed field is
+      <b>clumpy</b>, and a perfectly even arrangement is exponentially rare (<span class="big">P ~ e<sup>−M</sup></span>).
+      This is why the foraging mechanism, tuned to nothing, is matched to the world: resources are
+      clumped by default.</p>
+    <p class="sub">Watch the right-hand plot fill in as you run trials — it is the distribution the
+      paper's entropy figure plots, built by Monte Carlo. Mass piles up near the typical value
+      <b>e/M ≈ 1/e ≈ 0.37</b>; the even end (<b>e/M = 0</b>) is never visited.</p>
+  </div>
+
+  <div id="app">
+    <div class="panel">
+      <h2>One uniform-random drop</h2>
+      <canvas id="grid" width="380" height="380"></canvas>
+      <div class="btns">
+        <button id="newDrop">New random drop</button>
+      </div>
+      <div class="btns" id="sizeBtns">
+        <button data-side="6">6×6 (M=36)</button>
+        <button data-side="8">8×8 (M=64)</button>
+        <button data-side="10" class="on">10×10 (M=100)</button>
+        <button data-side="14">14×14 (M=196)</button>
+      </div>
+      <div class="legend">
+        <span class="sw" style="background:#ffffff"></span>empty cell &nbsp;
+        <span class="sw" style="background:#fde0c5"></span>1 &nbsp;
+        <span class="sw" style="background:#f4a259"></span>2 &nbsp;
+        <span class="sw" style="background:#d9631e"></span>3 &nbsp;
+        <span class="sw" style="background:#8a3410"></span>4+ targets
+      </div>
+      <div class="stat">
+        <div><div class="v" id="sEmpty">–</div><div class="k">empty-cell fraction e/M</div></div>
+        <div><div class="v" id="sMax">–</div><div class="k">fullest cell</div></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Distribution over trials — uneven fields dominate</h2>
+      <canvas id="dist" width="560" height="380"></canvas>
+      <div class="btns">
+        <button id="run1">+1 trial</button>
+        <button id="run1k">Run 1,000</button>
+        <button id="run50k">Run 50,000</button>
+        <button id="resetD">Reset</button>
+      </div>
+      <div class="stat">
+        <div><div class="v" id="sTrials">0</div><div class="k">trials run</div></div>
+        <div><div class="v" id="sMean">–</div><div class="k">mean e/M</div></div>
+        <div><div class="v big" id="sEven">0</div><div class="k">perfectly-even fields seen</div></div>
+      </div>
+      <div class="note">Each trial is one random drop; we bin its empty-cell fraction. The dotted line
+        marks e/M = 1/e (the typical, clumpy value). No matter how many trials you run, the count of
+        <i>perfectly even</i> fields stays at <b>0</b> — that is the e<sup>−M</sup> rarity, live.</div>
+    </div>
+  </div>
+
+<script>
+// ---------- state ----------
+let SIDE = 10;                 // grid side; M = K = SIDE*SIDE
+const NBINS = 40;              // histogram bins over e/M in [0,1]
+let hist = new Array(NBINS).fill(0);
+let trials = 0, sumFrac = 0, evenSeen = 0;
+let curCounts = null;
+
+const COLORS = ["#ffffff","#fde0c5","#f4a259","#d9631e","#8a3410"]; // 0,1,2,3,4+
+
+// ---------- one random drop ----------
+function drop(side){
+  const K = side*side, c = new Array(K).fill(0);
+  for(let i=0;i<K;i++){ c[(Math.random()*K)|0]++; }   // M=K balls into K boxes
+  return c;
+}
+function emptyFrac(counts){ let e=0; for(const v of counts) if(v===0) e++; return e/counts.length; }
+
+// ---------- draw the grid of dots ----------
+function drawGrid(){
+  const cv=document.getElementById("grid"), g=cv.getContext("2d"), W=cv.width, H=cv.height;
+  g.clearRect(0,0,W,H); g.fillStyle="#fbfbfd"; g.fillRect(0,0,W,H);
+  const cell = Math.floor(Math.min(W,H)/SIDE), ox=(W-cell*SIDE)/2, oy=(H-cell*SIDE)/2;
+  // faint cell shading by count, then dots on top
+  for(let r=0;r<SIDE;r++) for(let cc=0;cc<SIDE;cc++){
+    const n=curCounts[r*SIDE+cc];
+    g.fillStyle = COLORS[Math.min(n,4)];
+    g.globalAlpha = n? 0.28 : 0; g.fillRect(ox+cc*cell, oy+r*cell, cell, cell); g.globalAlpha=1;
+    g.strokeStyle="#d9dde4"; g.lineWidth=1; g.strokeRect(ox+cc*cell, oy+r*cell, cell, cell);
+  }
+  // dots: jitter each target inside its cell so stacks read as clusters
+  const rad = Math.max(2.2, cell*0.16);
+  for(let r=0;r<SIDE;r++) for(let cc=0;cc<SIDE;cc++){
+    const n=curCounts[r*SIDE+cc]; if(!n) continue;
+    for(let k=0;k<n;k++){
+      const jx=(Math.random()*2-1)*cell*0.26, jy=(Math.random()*2-1)*cell*0.26;
+      const x=ox+cc*cell+cell/2+jx, y=oy+r*cell+cell/2+jy;
+      g.beginPath(); g.arc(x,y,rad,0,7); g.fillStyle="#d9631e"; g.fill();
+      g.lineWidth=0.6; g.strokeStyle="#5a2408"; g.stroke();
+    }
+  }
+}
+
+// ---------- draw the accumulating distribution ----------
+function drawDist(){
+  const cv=document.getElementById("dist"), g=cv.getContext("2d"), W=cv.width, H=cv.height;
+  g.clearRect(0,0,W,H); g.fillStyle="#fbfbfd"; g.fillRect(0,0,W,H);
+  const padL=44, padR=12, padT=14, padB=34, PW=W-padL-padR, PH=H-padT-padB;
+  const XM=0.7;                                            // show e/M in [0, 0.7], like the paper
+  const X = f => padL + (f/XM)*PW;
+  const maxH = Math.max(1, ...hist);
+  const Y = h => padT + PH - (h/maxH)*PH;
+  // axes
+  g.strokeStyle="#c8ccd4"; g.lineWidth=1;
+  g.beginPath(); g.moveTo(padL,padT); g.lineTo(padL,padT+PH); g.lineTo(padL+PW,padT+PH); g.stroke();
+  // bars
+  const binW = PW/(NBINS*XM);                              // px per bin within [0,XM]
+  for(let b=0;b<NBINS;b++){
+    const f0=b/NBINS; if(f0>XM) break;
+    const h=hist[b]; if(!h) continue;
+    const x=X(f0), w=Math.max(1, X((b+1)/NBINS)-x-0.5);
+    g.fillStyle="rgba(224,123,57,0.85)"; g.fillRect(x, Y(h), w, padT+PH-Y(h));
+  }
+  // 1/e reference line
+  const xe=X(1/Math.E);
+  g.setLineDash([4,4]); g.strokeStyle="#333"; g.lineWidth=1;
+  g.beginPath(); g.moveTo(xe,padT); g.lineTo(xe,padT+PH); g.stroke(); g.setLineDash([]);
+  // e=0 marker + label
+  g.fillStyle="#8b2d8b"; g.beginPath(); g.arc(X(0),padT+PH,4,0,7); g.fill();
+  g.fillStyle="#555"; g.font="12px -apple-system,Segoe UI,Arial";
+  g.fillText("even (e/M=0):", X(0)+6, padT+PH-30);
+  g.fillText("P ~ e⁻ᴹ, never seen", X(0)+6, padT+PH-15);
+  g.fillStyle="#333"; g.fillText("typical  e/M ≈ 1/e ≈ 0.37", xe+6, padT+14);
+  // x axis ticks
+  g.fillStyle="#666"; g.font="11px -apple-system,Segoe UI,Arial"; g.textAlign="center";
+  for(let t=0;t<=0.7+1e-9;t+=0.1){ g.fillText(t.toFixed(1), X(t), padT+PH+16); }
+  g.textAlign="left"; g.fillStyle="#888";
+  g.save(); g.translate(13, padT+PH/2); g.rotate(-Math.PI/2); g.textAlign="center";
+  g.fillText("trials (count)", 0, 0); g.restore();
+  g.textAlign="center"; g.fillText("empty-cell fraction  e/M   (0 = even → clustered)", padL+PW/2, H-4);
+  g.textAlign="left";
+}
+
+// ---------- run trials ----------
+function addTrial(){
+  const c = drop(SIDE), f = emptyFrac(c);
+  let b = Math.floor(f*NBINS); if(b>=NBINS) b=NBINS-1;
+  hist[b]++; trials++; sumFrac+=f; if(f===0) evenSeen++;
+}
+function runMany(n){
+  for(let i=0;i<n;i++) addTrial();
+  updateStats(); drawDist();
+}
+function updateStats(){
+  document.getElementById("sTrials").textContent = trials.toLocaleString();
+  document.getElementById("sMean").textContent = trials? (sumFrac/trials).toFixed(3) : "–";
+  document.getElementById("sEven").textContent = evenSeen.toLocaleString();
+}
+function resetDist(){ hist=new Array(NBINS).fill(0); trials=0; sumFrac=0; evenSeen=0;
+  updateStats(); drawDist(); }
+
+// ---------- single-drop panel ----------
+function newDrop(){
+  curCounts = drop(SIDE);
+  document.getElementById("sEmpty").textContent = emptyFrac(curCounts).toFixed(3);
+  document.getElementById("sMax").textContent = Math.max(...curCounts);
+  drawGrid();
+}
+
+// ---------- controls ----------
+document.getElementById("newDrop").onclick = newDrop;
+document.getElementById("run1").onclick  = ()=>runMany(1);
+document.getElementById("run1k").onclick = ()=>runMany(1000);
+document.getElementById("run50k").onclick= ()=>runMany(50000);
+document.getElementById("resetD").onclick= resetDist;
+document.querySelectorAll("#sizeBtns button").forEach(btn=>{
+  btn.onclick = ()=>{
+    document.querySelectorAll("#sizeBtns button").forEach(b=>b.classList.remove("on"));
+    btn.classList.add("on");
+    SIDE = +btn.dataset.side; resetDist(); newDrop();
+  };
+});
+
+// ---------- init ----------
+newDrop(); resetDist();
+</script>
+</body>
+</html>
