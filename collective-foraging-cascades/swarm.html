@@ -18,7 +18,7 @@
   .sub { color:var(--muted); font-size:14px; margin:0; max-width:1150px; line-height:1.45; }
   #app { display:flex; gap:16px; padding:10px 24px 28px; align-items:flex-start; }
   #torusWrap { position:relative; width:640px; flex:0 0 auto; }
-  #canvas { background:#fbfbfd; border-radius:8px; }
+  #canvas { background:#fbfbfd; border-radius:8px; cursor:zoom-in; }
   #regimeCorner { position:absolute; top:12px; left:12px; display:flex; flex-direction:column;
                   gap:6px; align-items:flex-start; }
   #presetLabel { padding:6px 12px; border-radius:6px; font-size:13px; font-weight:700;
@@ -53,7 +53,7 @@
   .card::after { content:"⤢"; position:absolute; top:8px; right:11px; color:var(--muted);
                  font-size:14px; opacity:.55; pointer-events:none; }
   .card:hover::after { opacity:1; color:var(--blue); }
-  .card[data-tip]:hover::before { content:attr(data-tip); position:absolute; top:27px; right:8px;
+  [data-tip]:hover::before { content:attr(data-tip); position:absolute; top:27px; right:8px;
     background:#0b0d11; color:#e6e8ec; border:1px solid var(--line); padding:4px 9px; border-radius:5px;
     font-size:11px; white-space:nowrap; z-index:30; pointer-events:none; }   /* instant, no title-delay */
   #modal { position:fixed; inset:0; background:rgba(6,8,12,.82); display:flex; align-items:center;
@@ -66,8 +66,11 @@
   #modalClose { background:#2b3145; padding:6px 12px; }
   #modalCanvas { background:#171a21; border-radius:8px; display:block; max-width:100%; height:auto; }
   #modalNote { font-size:12.5px; color:var(--muted); margin-top:9px; max-width:920px; line-height:1.5; }
+  #modalSlot { display:flex; justify-content:center; }
+  #modalSlot:empty { display:none; }
+  .zoomedSvg { width:min(84vw,84vh) !important; height:min(84vw,84vh) !important; }   /* torus enlarged */
   #plotgrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:12px; }
-  .card { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:10px 12px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:7px 12px; }
   .card h3 { font-size:13px; text-transform:uppercase; letter-spacing:.03em; color:var(--ink);
              margin:0 0 6px; font-weight:650; display:flex; justify-content:space-between; gap:8px; }
   .card h3 b { color:var(--ink); font-weight:650; font-variant-numeric:tabular-nums; }
@@ -104,8 +107,8 @@
   </div>
 
   <div id="app">
-    <div id="torusWrap">
-      <svg id="canvas" width="640" height="640"></svg>
+    <div id="torusWrap" data-tip="Click to enlarge">
+      <svg id="canvas" width="640" height="640" viewBox="0 0 640 640"></svg>
       <div id="regimeCorner">
         <div id="presetLabel"><span class="cap">preset</span><span id="presetName">Balanced forager</span></div>
       </div>
@@ -132,16 +135,13 @@
 
       <div id="plotgrid">
         <div class="card" data-tip="Click to enlarge"><h3><span>Phase space: the explore→recruit→consume→block cycle (Fig. 8)</span><b id="bPhase"></b></h3>
-          <canvas id="pPhase" width="500" height="215"></canvas></div>
+          <canvas id="pPhase" width="500" height="185"></canvas></div>
         <div class="card" data-tip="Click to enlarge"><h3><span>Explore / exploit balance over time (self-limitation)</span><b id="bBal"></b></h3>
-          <canvas id="pIU" width="500" height="140"></canvas>
+          <canvas id="pIU" width="500" height="118"></canvas>
           <div class="plegend"><span><i class="sw" style="background:#d94f3d"></i>exploring</span><span><i class="sw" style="background:#37c26b"></i>recruited</span><span><i class="sw" style="background:#f0a92e"></i>on food (seed)</span></div></div>
         <div class="card" data-tip="Click to enlarge"><h3><span>Local criticality: recruited-cluster CCDF (log-log)</span><b id="bCrit"></b></h3>
-          <canvas id="pCrit" width="500" height="175"></canvas>
-          <div class="pnote">A straight line on log–log axes is a <b>power law</b>: recruited clusters have
-            <b>no typical size</b> (scale-free) — the fingerprint of criticality. Cascades of every size occur,
-            up to a finite-size cutoff set by the swarm. That the swarm self-organizes to this poised, critical-like
-            state — with no tuning — is the point.</div></div>
+          <canvas id="pCrit" width="500" height="150"></canvas>
+          <div class="pnote"><b>Straight = scale-free</b>: recruited clusters have no typical size — criticality, reached with no tuning.</div></div>
       </div>
     </div>
 
@@ -167,6 +167,7 @@
   <div id="modal" hidden>
     <div id="modalBox">
       <div id="modalHead"><span id="modalTitle"></span><button id="modalClose">✕ close</button></div>
+      <div id="modalSlot"></div>
       <canvas id="modalCanvas" width="920" height="520"></canvas>
       <div id="modalNote"></div>
     </div>
@@ -710,13 +711,30 @@ function drawZoom(){ if(!zoom) return;
   if(zoom==="pPhase") phaseplot("modalCanvas", agents, flowEMA);
   else if(zoom==="pIU") tseries("modalCanvas", [{arr:smooth(tsExp,4),color:"#d94f3d"},{arr:smooth(tsRec,4),color:"#37c26b"},{arr:smooth(tsSeed,4),color:"#f0a92e"}], 1);
   else if(zoom==="pCrit") loglog("modalCanvas", sizeHist, "#c98cf0", P.N.v); }
-function openZoom(id){ zoom=id; const z=ZOOM[id];
-  document.getElementById("modalTitle").textContent=z.title;
-  document.getElementById("modalNote").textContent=z.note;
-  document.getElementById("modal").hidden=false; drawZoom(); }
-function closeZoom(){ zoom=null; document.getElementById("modal").hidden=true; }
+function openZoom(id){
+  if(!document.getElementById("modal").hidden && zoom===id) return;      // already enlarged
+  zoom=id; const mc=document.getElementById("modalCanvas");
+  if(id==="torus"){                                                      // move the live SVG into the modal
+    document.getElementById("modalTitle").textContent="Swarm on the torus — live";
+    document.getElementById("modalNote").textContent="The full simulation, enlarged. Red = exploring (Lévy), yellow = on food (seed), green = recruited (cascade); grey links = proximity graph, green links = recruited.";
+    mc.hidden=true;
+    const cv=document.getElementById("canvas"); cv.classList.add("zoomedSvg");
+    document.getElementById("modalSlot").appendChild(cv);
+  } else {
+    mc.hidden=false;
+    const z=ZOOM[id]; document.getElementById("modalTitle").textContent=z.title;
+    document.getElementById("modalNote").textContent=z.note; drawZoom();
+  }
+  document.getElementById("modal").hidden=false;
+}
+function closeZoom(){
+  if(zoom==="torus"){ const cv=document.getElementById("canvas"); cv.classList.remove("zoomedSvg");
+    const home=document.getElementById("torusWrap"); home.insertBefore(cv, home.firstChild); }
+  zoom=null; document.getElementById("modal").hidden=true;
+}
 ["pPhase","pIU","pCrit"].forEach(id=>{ const card=document.getElementById(id).closest(".card");
   if(card) card.addEventListener("click", ()=>openZoom(id)); });
+document.getElementById("canvas").addEventListener("click", ()=>openZoom("torus"));
 document.getElementById("modalClose").onclick=closeZoom;
 document.getElementById("modal").addEventListener("click", e=>{ if(e.target.id==="modal") closeZoom(); });
 document.addEventListener("keydown", e=>{ if(e.key==="Escape") closeZoom(); });
