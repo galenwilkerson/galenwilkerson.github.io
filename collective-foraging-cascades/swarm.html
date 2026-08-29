@@ -34,6 +34,8 @@
                 margin-right:5px; vertical-align:middle; }
   #figs { flex:1 1 auto; min-width:0; display:flex; flex-direction:column; gap:14px; }
   #controls { width:300px; flex:0 0 auto; }   /* grows to fit; the whole window scrolls, not the pane */
+  #presetBtns { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }   /* 5 presets -> 2 rows */
+  #presetBtns button { padding:8px 6px; font-size:12px; line-height:1.2; }
   .panel { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px 14px; }
   .panel h2 { font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted);
               margin:0 0 10px; font-weight:650; }
@@ -51,6 +53,9 @@
   .card::after { content:"⤢"; position:absolute; top:8px; right:11px; color:var(--muted);
                  font-size:14px; opacity:.55; pointer-events:none; }
   .card:hover::after { opacity:1; color:var(--blue); }
+  .card[data-tip]:hover::before { content:attr(data-tip); position:absolute; top:27px; right:8px;
+    background:#0b0d11; color:#e6e8ec; border:1px solid var(--line); padding:4px 9px; border-radius:5px;
+    font-size:11px; white-space:nowrap; z-index:30; pointer-events:none; }   /* instant, no title-delay */
   #modal { position:fixed; inset:0; background:rgba(6,8,12,.82); display:flex; align-items:center;
            justify-content:center; z-index:50; padding:20px; }
   #modal[hidden] { display:none; }   /* the id rule would otherwise override the hidden attribute */
@@ -103,7 +108,6 @@
       <svg id="canvas" width="640" height="640"></svg>
       <div id="regimeCorner">
         <div id="presetLabel"><span class="cap">preset</span><span id="presetName">Balanced forager</span></div>
-        <div id="badge">—</div>
       </div>
       <div id="legend">
         <span><span class="dot" style="background:#d94f3d"></span>exploring (Lévy)</span>
@@ -127,13 +131,13 @@
       </div>
 
       <div id="plotgrid">
-        <div class="card" title="Click to enlarge"><h3><span>Phase space: the explore→recruit→consume→block cycle (Fig. 8)</span><b id="bPhase"></b></h3>
-          <canvas id="pPhase" width="500" height="260"></canvas></div>
-        <div class="card" title="Click to enlarge"><h3><span>Explore / exploit balance over time (self-limitation)</span><b id="bBal"></b></h3>
-          <canvas id="pIU" width="500" height="220"></canvas>
+        <div class="card" data-tip="Click to enlarge"><h3><span>Phase space: the explore→recruit→consume→block cycle (Fig. 8)</span><b id="bPhase"></b></h3>
+          <canvas id="pPhase" width="500" height="215"></canvas></div>
+        <div class="card" data-tip="Click to enlarge"><h3><span>Explore / exploit balance over time (self-limitation)</span><b id="bBal"></b></h3>
+          <canvas id="pIU" width="500" height="140"></canvas>
           <div class="plegend"><span><i class="sw" style="background:#d94f3d"></i>exploring</span><span><i class="sw" style="background:#37c26b"></i>recruited</span><span><i class="sw" style="background:#f0a92e"></i>on food (seed)</span></div></div>
-        <div class="card" title="Click to enlarge"><h3><span>Local criticality: recruited-cluster CCDF (log-log)</span><b id="bCrit"></b></h3>
-          <canvas id="pCrit" width="500" height="220"></canvas>
+        <div class="card" data-tip="Click to enlarge"><h3><span>Local criticality: recruited-cluster CCDF (log-log)</span><b id="bCrit"></b></h3>
+          <canvas id="pCrit" width="500" height="175"></canvas>
           <div class="pnote">A straight line on log–log axes is a <b>power law</b>: recruited clusters have
             <b>no typical size</b> (scale-free) — the fingerprint of criticality. Cascades of every size occur,
             up to a finite-size cutoff set by the swarm. That the swarm self-organizes to this poised, critical-like
@@ -544,17 +548,16 @@ function scatter(id,pts,xf,yf,o){ const [c,W,H]=ctxOf(id); const pad=6;
   if(n && !o.line){ const p=pts[n-1]; c.fillStyle="#f0a92e"; c.beginPath(); c.arc(X(xf(p)),Y(yf(p)),4.5,0,7); c.fill(); } }
 function loglog(id,hist,color,nRef){
   const cv=document.getElementById(id), c=cv.getContext("2d"), W=cv.width, H=cv.height; c.clearRect(0,0,W,H);
-  const padL=44,padR=14,padT=14,padB=30, PW=W-padL-padR, PH=H-padT-padB;
-  const frame=()=>{ c.strokeStyle="#2a2f3a"; c.lineWidth=1; c.beginPath();
+  const S=W/500, F=n=>`${(n*S).toFixed(1)}px -apple-system,Segoe UI,Arial`;   // font/size scale
+  const padL=30+16*S, padR=14, padT=12*S, padB=22+10*S, PW=W-padL-padR, PH=H-padT-padB;
+  const frame=()=>{ c.strokeStyle="#2a2f3a"; c.lineWidth=S; c.beginPath();
     c.moveTo(padL,padT); c.lineTo(padL,padT+PH); c.lineTo(padL+PW,padT+PH); c.stroke(); };
   const ks=Object.keys(hist).map(Number).filter(k=>k>=1).sort((a,b)=>a-b);
   if(ks.length<2){ frame(); return; }
   const tot=ks.reduce((s,k)=>s+hist[k],0); let cum=0; const pts=[];   // CCDF P(S≥s)
   const kmax=ks[ks.length-1]; for(const k of ks){ const ccdf=(tot-cum)/tot; pts.push([Math.log10(k),Math.log10(ccdf)]); cum+=hist[k]; }
-  const xtop=(nRef&&nRef>1)?Math.max(kmax,nRef):kmax;
-  const xm=Math.max(0.35,Math.log10(Math.max(2,xtop))), ymin=Math.min(-0.4,...pts.map(p=>p[1]));
+  const xm=Math.max(0.35,Math.log10(Math.max(2,kmax))+0.08), ymin=Math.min(-0.4,...pts.map(p=>p[1]));
   const X=v=>padL+(v/xm)*PW, Y=v=>padT+(v/ymin)*PH;
-  // least-squares slope over the SCALING REGION only (the top decade is the finite-size cutoff).
   const fit=pts.filter(q=>q[0]<=xm*0.75 && q[1]>Math.log10(0.02)); let b=NaN,a0=NaN,xlo=0,xhi=0;
   if(fit.length>=4){ const n=fit.length,
       sx=fit.reduce((a,q)=>a+q[0],0), sy=fit.reduce((a,q)=>a+q[1],0),
@@ -564,34 +567,34 @@ function loglog(id,hist,color,nRef){
     window._critSlope=b; window._critR2 = st>1e-12? 1-ss/st : NaN; xlo=fit[0][0]; xhi=fit[fit.length-1][0];
   } else { window._critSlope=NaN; window._critR2=NaN; }
   frame();
-  if(nRef&&nRef>1){ const xr=X(Math.log10(nRef));                       // finite-size ceiling: s = N
-    c.setLineDash([4,4]); c.strokeStyle="#8892a5"; c.lineWidth=1;
+  { const xr=X(Math.log10(kmax));                                      // finite-size cutoff = largest cluster
+    c.setLineDash([4,4]); c.strokeStyle="#8892a5"; c.lineWidth=S;
     c.beginPath(); c.moveTo(xr,padT); c.lineTo(xr,padT+PH); c.stroke(); c.setLineDash([]);
-    c.fillStyle="#aeb7c6"; c.font="10px -apple-system,Segoe UI,Arial"; c.textAlign="center";
-    c.fillText("N (swarm size)", Math.min(xr,padL+PW-30), padT+10); }
+    c.fillStyle="#aeb7c6"; c.font=F(9.5); c.textAlign="right";
+    c.fillText("finite-size cutoff", xr-4*S, padT+11*S); }
   if(isFinite(b)){ const xe=Math.min(xhi+0.2,xm);                       // fitted power law (dashed)
-    c.setLineDash([5,4]); c.strokeStyle="#f0a92e"; c.lineWidth=1.5;
+    c.setLineDash([5,4]); c.strokeStyle="#f0a92e"; c.lineWidth=1.5*S;
     c.beginPath(); c.moveTo(X(xlo),Y(a0+b*xlo)); c.lineTo(X(xe),Y(a0+b*xe)); c.stroke(); c.setLineDash([]); }
-  c.strokeStyle=color; c.lineWidth=2; c.beginPath();                    // CCDF curve
+  c.strokeStyle=color; c.lineWidth=2*S; c.beginPath();                  // CCDF curve
   pts.forEach((p,i)=>{ const x=X(p[0]),y=Y(p[1]); i?c.lineTo(x,y):c.moveTo(x,y); }); c.stroke();
-  c.fillStyle=color; pts.forEach(p=>{ c.beginPath(); c.arc(X(p[0]),Y(p[1]),2,0,7); c.fill(); });
-  // labels + annotations
-  c.font="10px -apple-system,Segoe UI,Arial"; c.textAlign="center"; c.fillStyle="#9aa3af";
-  c.fillText("recruited-cluster size  s   (log) →", padL+PW/2, H-4);
-  c.save(); c.translate(12,padT+PH/2); c.rotate(-Math.PI/2); c.fillText("P(S ≥ s)   (log)",0,0); c.restore();
-  if(isFinite(b)){ c.fillStyle="#f0a92e"; c.textAlign="left"; c.font="10.5px -apple-system,Segoe UI,Arial";
-    c.fillText("straight ⇒ scale-free", X(xlo)+3, Y(a0+b*xlo)-7); }
+  c.fillStyle=color; pts.forEach(p=>{ c.beginPath(); c.arc(X(p[0]),Y(p[1]),2*S,0,7); c.fill(); });
+  c.font=F(10); c.textAlign="center"; c.fillStyle="#9aa3af";
+  c.fillText("recruited-cluster size  s   (log) →", padL+PW/2, H-5*S);
+  c.save(); c.translate(11*S,padT+PH/2); c.rotate(-Math.PI/2); c.fillText("P(S ≥ s)   (log)",0,0); c.restore();
+  if(isFinite(b)){ c.fillStyle="#f0a92e"; c.textAlign="left"; c.font=F(10.5);
+    c.fillText("straight ⇒ scale-free", X(xlo)+3, Y(a0+b*xlo)-7*S); }
 }
-function tseries(id,series,ymax){ const [c,W,H]=ctxOf(id); axis(c,W,H);
+function tseries(id,series,ymax){ const [c,W,H]=ctxOf(id); axis(c,W,H); const S=W/500;
   const mx=ymax||Math.max(1,...series.flatMap(s=>s.arr));
-  for(const s of series){ if(s.arr.length<2) continue; c.strokeStyle=s.color; c.lineWidth=1.6; c.beginPath();
+  for(const s of series){ if(s.arr.length<2) continue; c.strokeStyle=s.color; c.lineWidth=1.8*S; c.beginPath();
     s.arr.forEach((y,i)=>{ const x=i/(s.arr.length-1)*W, py=H-2-(y/mx)*(H-4); i?c.lineTo(x,py):c.moveTo(x,py); }); c.stroke(); } }
-function arrow(c,x1,y1,x2,y2,cx,cy){                    // curved arrow with a head at (x2,y2)
+function arrow(c,x1,y1,x2,y2,cx,cy,hs){                 // curved arrow with a head (size hs) at (x2,y2)
+  hs=hs||9;
   c.beginPath(); c.moveTo(x1,y1); c.quadraticCurveTo(cx,cy,x2,y2); c.stroke();
   const ang=Math.atan2(y2-cy,x2-cx);
   c.beginPath(); c.moveTo(x2,y2);
-  c.lineTo(x2-9*Math.cos(ang-0.42), y2-9*Math.sin(ang-0.42));
-  c.lineTo(x2-9*Math.cos(ang+0.42), y2-9*Math.sin(ang+0.42));
+  c.lineTo(x2-hs*Math.cos(ang-0.42), y2-hs*Math.sin(ang-0.42));
+  c.lineTo(x2-hs*Math.cos(ang+0.42), y2-hs*Math.sin(ang+0.42));
   c.closePath(); c.fill();
 }
 function smooth(a,w){ const n=a.length; if(n<3||!w) return a; const o=new Array(n);
@@ -606,7 +609,8 @@ const MAXR=44;                                    // max node radius, for fixed 
 function phaseplot(id, ags, flows){
   const cv=document.getElementById(id), c=cv.getContext("2d"), W=cv.width, H=cv.height;
   c.clearRect(0,0,W,H);
-  const padL=18,padR=16,padT=16,padB=26, PW=W-padL-padR, PH=H-padT-padB;
+  const S=W/500, F=n=>`${(n*S).toFixed(1)}px -apple-system,Segoe UI,Arial`;   // font/size scale
+  const padL=18,padR=16,padT=16*S,padB=24*S, PW=W-padL-padR, PH=H-padT-padB;
   const PX=fx=>padL+fx*PW, PY=fy=>padT+(1-fy)*PH;                 // fy: 0 bottom, 1 top (activity axis)
   const N={ explore:{fx:0.14,fy:0.16,col:"#d94f3d",label:"exploration"},
             recruit:{fx:0.44,fy:0.50,col:"#37c26b",label:"recruitment"},
@@ -616,43 +620,44 @@ function phaseplot(id, ags, flows){
   const stateOf=ag=> ag.seed?"consume": ag.active?"recruit": ag._blk?"block":"explore";
   const counts={explore:0,recruit:0,consume:0,block:0}; ags.forEach(a=>counts[stateOf(a)]++);
   const total=Math.max(1,ags.length);
-  const rad={}; for(const k in N){ rad[k]=13+31*Math.sqrt(counts[k]/total); }
+  const rad={}; for(const k in N){ rad[k]=(13+31*Math.sqrt(counts[k]/total))*S; }   // node radius, scaled
   // (1) faint static cycle backdrop so the loop always reads
   const cyc=[["explore","recruit"],["recruit","consume"],["consume","block"],["block","explore"]];
-  c.strokeStyle="rgba(174,183,198,0.14)"; c.fillStyle="rgba(174,183,198,0.14)"; c.lineWidth=1.2;
+  c.strokeStyle="rgba(174,183,198,0.14)"; c.fillStyle="rgba(174,183,198,0.14)"; c.lineWidth=1.2*S;
   cyc.forEach(([a,b])=>{ const p1=P(a),p2=P(b), mx=(p1[0]+p2[0])/2,my=(p1[1]+p2[1])/2,
       dx=p2[0]-p1[0],dy=p2[1]-p1[1],len=Math.hypot(dx,dy)||1,bow=0.16*len;
-    arrow(c,p1[0],p1[1],p2[0],p2[1], mx-dy/len*bow, my+dx/len*bow); });
+    arrow(c,p1[0],p1[1],p2[0],p2[1], mx-dy/len*bow, my+dx/len*bow, 9*S); });
   // (2) node halos (brightness = count share)
   for(const k in N){ const nd=N[k], x=PX(nd.fx), y=PY(nd.fy), r=rad[k], frac=counts[k]/total;
     c.globalAlpha=0.10+0.24*frac; c.fillStyle=nd.col;
-    c.beginPath(); c.arc(x,y,r+4,0,7); c.fill();
-    c.globalAlpha=0.5; c.lineWidth=1.2; c.strokeStyle=nd.col;
-    c.beginPath(); c.arc(x,y,r+4,0,7); c.stroke(); c.globalAlpha=1;
+    c.beginPath(); c.arc(x,y,r+4*S,0,7); c.fill();
+    c.globalAlpha=0.5; c.lineWidth=1.2*S; c.strokeStyle=nd.col;
+    c.beginPath(); c.arc(x,y,r+4*S,0,7); c.stroke(); c.globalAlpha=1;
   }
   // (3) real flow arrows on top -- FIXED endpoint offsets (independent of node size, so no bounce);
   //     width + brightness proportional to how many agents actually transitioned this way
-  const OFF=22, fmax=Math.max(0.6, ...Object.values(flows||{}));
+  const OFF=22*S, fmax=Math.max(0.6, ...Object.values(flows||{}));
   for(const key in (flows||{})){ const f=flows[key]; if(f<0.2) continue;
     const [a,b]=key.split(">"); if(!N[a]||!N[b]) continue;
     const p1=P(a),p2=P(b), dx=p2[0]-p1[0],dy=p2[1]-p1[1],len=Math.hypot(dx,dy)||1,ux=dx/len,uy=dy/len;
-    const sx=p1[0]+ux*OFF, sy=p1[1]+uy*OFF, ex=p2[0]-ux*(OFF+6), ey=p2[1]-uy*(OFF+6);
+    const sx=p1[0]+ux*OFF, sy=p1[1]+uy*OFF, ex=p2[0]-ux*(OFF+6*S), ey=p2[1]-uy*(OFF+6*S);
     const mx=(sx+ex)/2,my=(sy+ey)/2,bow=0.16*len, t=f/fmax;
-    c.globalAlpha=0.32+0.55*t; c.strokeStyle=N[b].col; c.fillStyle=N[b].col; c.lineWidth=1.4+5.5*t;
-    arrow(c, sx,sy, ex,ey, mx-uy*bow, my+ux*bow); c.globalAlpha=1;
+    c.globalAlpha=0.32+0.55*t; c.strokeStyle=N[b].col; c.fillStyle=N[b].col; c.lineWidth=(1.4+5.5*t)*S;
+    arrow(c, sx,sy, ex,ey, mx-uy*bow, my+ux*bow, (7+3*t)*S); c.globalAlpha=1;
   }
   // (4) agents as a cloud at their stage node
   ags.forEach(ag=>{ const k=stateOf(ag), nd=N[k], r=rad[k]*0.9;
     const x=PX(nd.fx)+Math.cos(ag._ja||0)*(ag._jr||0)*r, y=PY(nd.fy)+Math.sin(ag._ja||0)*(ag._jr||0)*r;
-    c.beginPath(); c.arc(x,y,2.5,0,7); c.fillStyle=nd.col; c.globalAlpha=0.85; c.fill(); });
+    c.beginPath(); c.arc(x,y,2.5*S,0,7); c.fillStyle=nd.col; c.globalAlpha=0.85; c.fill(); });
   c.globalAlpha=1;
-  // (5) labels at FIXED positions (offset by MAXR so they never move as node size changes)
-  c.font="11.5px -apple-system,Segoe UI,Arial"; c.textAlign="center"; c.fillStyle="#cfd6e0";
+  // (5) labels at FIXED positions (offset by max node radius so they never move as node size changes)
+  const MR=44*S;
+  c.font=F(11.5); c.textAlign="center"; c.fillStyle="#cfd6e0";
   for(const k in N){ const nd=N[k], x=PX(nd.fx), y=PY(nd.fy);
-    const ly = (k==="consume") ? y+MAXR+18 : y-MAXR-11;
+    const ly = (k==="consume") ? y+MR+18*S : y-MR-9*S;
     c.fillText(nd.label+"  ·  "+counts[k], x, ly); }
-  c.fillStyle="#7a828f"; c.font="10px -apple-system,Segoe UI,Arial";
-  c.fillText("network / spatial density  →", padL+PW/2, H-3); c.textAlign="left";
+  c.fillStyle="#7a828f"; c.font=F(10);
+  c.fillText("network / spatial density  →", padL+PW/2, H-3*S); c.textAlign="left";
 }
 function fmt(x){ return x>=1e6?(x/1e6).toFixed(2)+"M":x>=1e3?(x/1e3).toFixed(1)+"k":x>=10?Math.round(x):x.toFixed(2); }
 
@@ -663,11 +668,11 @@ function fmt(x){ return x>=1e6?(x/1e6).toFixed(2)+"M":x>=1e3?(x/1e3).toFixed(1)+
 function updateBadge(){ const zm=(window._live||{}).z;
   const z = (zm!=null && isFinite(zm) && zm>0) ? zm : P.p.v*P.N.v*Math.PI*Math.pow(P.radius.v/L,2);
   const zc=4.5, zb=2/P.theta.v;
-  const b=document.getElementById("badge"), note=document.getElementById("regimeNote"); let t,col,msg;
-  if(z<zc){ t="UNDER-CONNECTED"; col="var(--bad)"; msg="Fragmented graph (z < zₚ≈4.5): cascades stay local, little recruitment — mostly solo Lévy foraging."; }
-  else if(z>zb){ t="BLOCKING"; col="var(--warn)"; msg=`Over-connected (z > 2/θ≈${zb.toFixed(1)}): high degree pushes a/k below θ — recruitment blocked and communication wasted.`; }
-  else { t="CASCADE WINDOW"; col="var(--good)"; msg=`In the window (zₚ≈4.5 < z < 2/θ≈${zb.toFixed(1)}): recruitment percolates without blocking — efficient explore/exploit balance.`; }
-  b.textContent=`${t}  (z≈${z.toFixed(1)})`; b.style.background=col; note.textContent=msg; }
+  const note=document.getElementById("regimeNote"); let msg;
+  if(z<zc){ msg="Fragmented graph (z < zₚ≈4.5): cascades stay local, little recruitment — mostly solo Lévy foraging."; }
+  else if(z>zb){ msg=`Over-connected (z > 2/θ≈${zb.toFixed(1)}): high degree pushes a/k below θ — recruitment blocked and communication wasted.`; }
+  else { msg=`In the window (zₚ≈4.5 < z < 2/θ≈${zb.toFixed(1)}): recruitment percolates without blocking — efficient explore/exploit balance.`; }
+  note.textContent=msg; }
 
 function render(){
   draw(); updateBadge();
