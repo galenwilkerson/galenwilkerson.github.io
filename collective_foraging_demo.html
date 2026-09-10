@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<!-- Collective foraging from recruitment cascades — live demo with "elegant coincidences" panels.
+     Author: Galen J. Wilkerson (Komplexity AI LLC). Companion to the paper (theory_paper_v10).
+     ONE running swarm; several classic results build LIVE from the same run:
+       (1) empirical phase portrait  (poised window / SOC drive-avalanche cycle)
+       (2) scale-free recruited-cluster CCDF  (local self-organized criticality)
+       (3) giving-up-density histogram  (marginal-value patch-leaving — blocking as the cause)
+       (4) IFD matching scatter  (ideal free distribution = reinforcement learning with no learner) -->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Collective foraging from simple recruitment cascades: a maximum-entropy path to natural, learner-free reinforcement learning</title>
+<style>
+  :root{ --grey:#7d7d82; --blue:#1250f0; --green:#16c74a; --red:#e41616; --ink:#222; }
+  body{ font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; color:var(--ink);
+        margin:0; padding:16px 20px; background:#fafafa; font-size:15px; }
+  h1{ font-size:23px; margin:0 0 3px; }
+  .sub{ color:#555; font-size:14.5px; line-height:1.35; margin:0 0 10px; max-width:none; }
+  .sub b{ color:var(--ink); }
+  .legend{ display:flex; gap:18px; flex-wrap:wrap; font-size:14.5px; margin:6px 0 12px; }
+  .legend span{ display:inline-flex; align-items:center; gap:6px; }
+  .dot{ width:13px; height:13px; border-radius:50%; display:inline-block; border:1px solid #0003; }
+  .wrap{ display:flex; gap:18px; align-items:flex-start; }
+  .main{ flex:1 1 auto; display:flex; gap:16px; flex-wrap:nowrap; align-items:flex-start; }
+  .col{ display:flex; flex-direction:column; gap:14px; flex:0 0 440px; width:440px; }
+  canvas{ background:#fff; border:1px solid #ccc; border-radius:4px; display:block; box-sizing:border-box; }
+  #torus{ width:440px; height:440px; }
+  .grid{ display:grid; grid-template-columns:repeat(2,348px); gap:11px 16px; align-content:flex-start; flex:0 0 auto; }
+  .cell{ display:flex; flex-direction:column; }
+  .cell .t{ font-size:13.5px; font-weight:600; margin:0 0 3px; height:26px; line-height:1.2; overflow:hidden; }
+  .cell .t small{ font-weight:400; color:#666; font-size:13px; }
+  #controls{ display:flex; flex-direction:column; gap:2px; flex:0 0 214px; width:214px; order:2; padding-right:4px; font-size:14px; }
+  .row{ display:flex; align-items:center; justify-content:space-between; gap:8px; margin:3px 0; }
+  .row label{ flex:1; } .row input[type=range]{ flex:1.1; } .row .val{ width:36px; text-align:right; color:#333; }
+  .btns{ display:flex; gap:6px; margin:7px 0; flex-wrap:wrap; }
+  button{ font-size:14px; padding:6px 11px; border:1px solid #999; border-radius:5px; background:#fff; cursor:pointer; }
+  button:hover{ background:#f0f0f0; }
+  .presets{ display:flex; gap:6px; flex-wrap:wrap; margin:3px 0; }
+  .presets button{ font-size:13px; padding:5px 9px; }
+  .presets button.on{ background:#1f4fd8; color:#fff; border-color:#1f4fd8; }
+  #regime{ font-size:13.5px; color:#333; margin:3px 0 5px; min-height:18px; }
+  #regime b{ font-variant-numeric:tabular-nums; }
+  .read{ font-size:14px; background:#fff; border:1px solid #ddd; border-radius:5px; padding:8px 10px; margin-top:7px; }
+  .read b{ font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+  <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin:0 0 8px">
+    <h1 style="margin:0">Collective foraging from simple recruitment cascades:</h1>
+    <span style="font-size:16px;color:#444;font-weight:600">a maximum-entropy path to natural, learner-free reinforcement learning</span>
+  </div>
+  <p class="sub">A threshold <b>contagion</b> (Watts/Granovetter LTM) embedded in space, where the signal
+  outruns the agents: a discovery <b>recruits</b> neighbours through a cascade on the proximity graph;
+  <b>fraction-normalised</b> activation both spreads it <i>and</i> stifles it once crowded (<b>blocking</b>);
+  the cascade rewires its own graph. Resources are sparse and <b>clumped</b> — the entropically generic
+  (maximum-entropy) field. One running swarm — and the <b>elegant coincidences</b> build <i>live</i> in the
+  panels: the self-organized cascade window, the poised SOC drive–avalanche cycle, scale-free avalanches,
+  marginal-value patch-leaving, the ideal-free distribution (reinforcement learning with no learner), the
+  two maximum entropies (Lévy search ↔ resource field), and near-critical branching.</p>
+
+  <div class="legend">
+    <span><i class="dot" style="background:var(--grey)"></i> explore (Lévy search)</span>
+    <span><i class="dot" style="background:var(--blue)"></i> recruit (cascade)</span>
+    <span><i class="dot" style="background:var(--green);width:15px;height:15px;box-shadow:0 0 0 2px #fff,0 0 0 3px #0004;border:none"></i> consume (on resource — haloed)</span>
+    <span><i class="dot" style="background:var(--red)"></i> blocked (crowded out)</span>
+    <span>◻ resource</span>
+  </div>
+
+  <div class="wrap">
+    <div class="main">
+    <div class="col">
+    <div class="cell">
+      <div class="t">The swarm <small>— agents coloured by state; lines = active edges</small></div>
+      <canvas id="torus" width="440" height="440"></canvas>
+    </div>
+    <div class="cell">
+      <div class="t">The cascade window <small>— active fraction vs endogenous z (Fig. 1)</small></div>
+      <canvas id="winfig" width="440" height="214"></canvas>
+    </div>
+    </div>
+
+    <div class="grid">
+      <div class="cell"><div class="t">1 · Phase portrait <small>— poised SOC cycle</small></div>
+        <canvas id="phase" width="348" height="206"></canvas></div>
+      <div class="cell"><div class="t">2 · Cluster-size CCDF <small>— scale-free cascades</small></div>
+        <canvas id="ccdf" width="348" height="206"></canvas></div>
+      <div class="cell"><div class="t">3 · Giving-up density <small>— leave before empty</small></div>
+        <canvas id="gud" width="348" height="206"></canvas></div>
+      <div class="cell"><div class="t">4 · Ideal free distribution <small>— RL without a learner</small></div>
+        <canvas id="ifd" width="348" height="206"></canvas></div>
+      <div class="cell"><div class="t">5 · Two maximum entropies <small>— offline curves; dot = live field × α</small></div>
+        <canvas id="maxent" width="348" height="206"></canvas></div>
+      <div class="cell"><div class="t">6 · Branching ratio σ <small>— poised near critical (SOC)</small></div>
+        <canvas id="sigma" width="348" height="206"></canvas></div>
+      <div class="cell"><div class="t">7 · State composition <small>— the drive–avalanche cycle in time</small></div>
+        <canvas id="comp" width="348" height="206"></canvas></div>
+      <div class="cell"><div class="t">8 · Cost profile per preset <small>— comms vs movement, per harvest</small></div>
+        <canvas id="paths" width="348" height="206"></canvas></div>
+    </div>
+    </div><!--/main-->
+
+    <div id="controls">
+      <div style="font-size:13.5px;font-weight:600;margin-bottom:2px">Presets <small style="font-weight:400;color:#666">— connectivity moves the swarm through the cascade window</small></div>
+      <div class="presets" id="presets">
+        <button data-p="sub">Sub-percolation</button><button data-p="window">Cascade window</button><button data-p="blocked">Blocked</button><button data-p="brown">Brownian</button><button data-p="moveff">Heavy-tail search</button><button data-p="commeff">Comm.-eff.</button><button data-p="uniform">Uniform field</button>
+      </div>
+      <div id="regime"></div>
+      <div class="btns">
+        <button id="start">Restart</button><button id="pause">Pause</button><button id="clearP">Clear panels</button>
+      </div>
+      <div class="row"><label>Agents N</label><input type="range" id="N" min="20" max="200" value="120"><span class="val" id="Nv">120</span></div>
+      <div class="row"><label>Resources</label><input type="range" id="B" min="1" max="40" value="16"><span class="val" id="Bv">16</span></div>
+      <div class="row"><label>Resource size</label><input type="range" id="S" min="4" max="40" value="16"><span class="val" id="Sv">16</span></div>
+      <div class="row"><label>Conn. radius</label><input type="range" id="R" min="12" max="140" value="52"><span class="val" id="Rv">52</span></div>
+      <div class="row"><label>Threshold φ</label><input type="range" id="PHI" min="0.05" max="0.5" step="0.01" value="0.15"><span class="val" id="PHIv">0.15</span></div>
+      <div class="row"><label>Lévy α</label><input type="range" id="AL" min="0.4" max="1.9" step="0.05" value="1.2"><span class="val" id="ALv">1.2</span></div>
+      <div class="row"><label>Explore step</label><input type="range" id="VE" min="2" max="40" step="1" value="24"><span class="val" id="VEv">24</span></div>
+      <div class="row"><label>Recruit step</label><input type="range" id="VX" min="0.5" max="8" step="0.5" value="3"><span class="val" id="VXv">3</span></div>
+      <div class="row"><label>Speed ticks/s</label><input type="range" id="TPS" min="2" max="60" step="1" value="12"><span class="val" id="TPSv">12</span></div>
+      <div class="read" id="readout">tick 0</div>
+    </div>
+  </div>
+
+<script>
+"use strict";
+const P={ N:100,B:16,S:16,R:52,PHI:0.15,AL:1.2,VE:24,VX:3,TPS:12,SCATTER:0 };
+const W=440,H=440, ZC=4.51, REGROW=0.07;   // slow resource regrowth sustains the drive-avalanche cycle
+// Presets tuned to the paper's operating point (N=100, phi=0.15, CLUMPED resources): window sits at
+// z_local~10 (paper 10.3), A~0.21 (paper 0.22). Connectivity radius R sets mean degree z; window in (z_c=4.51, 2/phi=13.3).
+const PRESETS={
+  sub:    {name:'Sub-percolation — pure foraging (cascades die at birth)', N:100, R:28, AL:1.5, VE:24},
+  window: {name:'Cascade window — recruit, converge, self-limit, release', N:100, R:52, AL:1.2, VE:24},
+  blocked:{name:'Blocked — graph so dense a/k rarely reaches φ', N:100, R:116, AL:1.5, VE:24},
+  brown:  {name:'Brownian search — window connectivity, no long hops', N:100, R:52, AL:1.9, VE:24},
+  moveff: {name:'Heavy-tail search — most search-efficient, but travel-heavy (recruitment is movement-neutral)', N:100, R:60, AL:1.1, VE:30},
+  commeff:{name:'Communication-efficient — sparse graph, cheap local cascades', N:80,  R:50, AL:1.5, VE:24},
+  uniform:{name:'Uniform field — resources scattered; recruitment over-concentrates (loses)', N:100, R:52, AL:1.5, VE:24, scatter:1},
+};
+const COL={ explore:[125,125,130], recruit:[18,80,240], consume:[22,199,74], blocked:[228,22,22] };
+
+const tC=byId('torus'),tx=tC.getContext('2d');
+const pC=byId('phase'),pxc=pC.getContext('2d');
+const cC=byId('ccdf'),cxc=cC.getContext('2d');
+const gC=byId('gud'),gxc=gC.getContext('2d');
+const iC=byId('ifd'),ixc=iC.getContext('2d');
+const wC=byId('winfig'),wxc=wC.getContext('2d');
+const meC=byId('maxent'),mexc=meC.getContext('2d');
+const sgC=byId('sigma'),sgxc=sgC.getContext('2d');
+const cpC=byId('comp'),cpxc=cpC.getContext('2d');
+const paC=byId('paths'),paxc=paC.getContext('2d');
+function byId(x){return document.getElementById(x);}
+
+// ---- phase-portrait occupancy ----
+const ZMAX=28, GX=44, GY=30, FGX=12, FGY=9;   // fine grid = colour field; coarse grid = flow arrows (fewer, bigger)
+let occ,mR,mC,mB,mE, trail=[], fU,fV,fC, prevZA=null, phaseOff=null;
+// ---- coincidence accumulators ----
+let sizeCounts, guHist;                 // CCDF sizes, giving-up densities
+let stepLens, resGaps, sigmaSeries, compBuf, levyPath, brownPath;   // panels 5-8
+let costProfiles={}, curPreset='window', tickSince=0;   // panel 8: per-preset cost profile (persists across presets)
+let agents=[], blobs=[], tick=0, timer=null, paused=false;
+// ---- cascade-window curve (Fig 1): PERSISTS across preset/restart so a connectivity sweep traces the inverted-U ----
+const WBINS=36; let winSum, winCnt;
+function clearWindow(){ winSum=new Float32Array(WBINS); winCnt=new Float32Array(WBINS); }
+clearWindow();
+
+function clearPanels(){
+  occ=new Float32Array(GX*GY); mR=new Float32Array(GX*GY); mC=new Float32Array(GX*GY);
+  mB=new Float32Array(GX*GY); mE=new Float32Array(GX*GY); trail=[];
+  fU=new Float32Array(FGX*FGY); fV=new Float32Array(FGX*FGY); fC=new Float32Array(FGX*FGY); prevZA=null;
+  sizeCounts=new Map(); guHist=[]; stepLens=[]; sigmaSeries=[]; compBuf=[];
+  if(blobs) blobs.forEach(b=>{ b.cSum=0; b.cN=0; b.worked=false; });
+}
+
+// ---- math helpers ----
+function randn(){let u,v;do{u=Math.random()}while(!u);do{v=Math.random()}while(!v);
+  return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
+function gamma(z){if(z<0.5)return Math.PI/(Math.sin(Math.PI*z)*gamma(1-z));z-=1;
+  const g=7,c=[0.99999999999980993,676.5203681218851,-1259.1392167224028,771.32342877765313,
+  -176.61502916214059,12.507343278686905,-0.13857109526572012,9.9843695780195716e-6,1.5056327351493116e-7];
+  let x=c[0];for(let i=1;i<g+2;i++)x+=c[i]/(z+i);const t=z+g+0.5;
+  return Math.sqrt(2*Math.PI)*Math.pow(t,z+0.5)*Math.exp(-t)*x;}
+function levy(){const a=Math.min(Math.max(P.AL,0.4),1.95);
+  const sn=Math.pow(gamma(1+a)*Math.sin(Math.PI*a/2),1/a);
+  const sd=Math.pow(gamma((1+a)/2)*a*Math.pow(2,(a-1)/2),1/a);
+  const s=sn/sd,u=s*randn(),w=Math.abs(randn());return (u/Math.pow(w,1/a))*P.VE/10;}
+function tDist(ax,ay,bx,by){const dx=Math.min(Math.abs(ax-bx),W-Math.abs(ax-bx)),
+  dy=Math.min(Math.abs(ay-by),H-Math.abs(ay-by));return Math.sqrt(dx*dx+dy*dy);}
+function tDelta(a,b,s){let d=b-a;if(d>s/2)d-=s;if(d<-s/2)d+=s;return d;}
+const wrap=(x,s)=>((x%s)+s)%s;
+
+// ---- init ----
+function init(){
+  tick=0;
+  // Resources are CLUMPED by default (sparse clustering = the entropically generic / maximum-entropy field,
+  // where recruitment pays). P.SCATTER=1 places them UNIFORMLY-random to show recruitment over-concentrates.
+  if(P.SCATTER){
+    blobs=Array.from({length:P.B},()=>{const r=Math.max(2,P.S*(0.5+0.9*Math.random()));
+      return {x:Math.random()*W,y:Math.random()*H,r,r0:r,cSum:0,cN:0,worked:false};});
+  } else {
+    const nClump=clamp(Math.round(P.B/4),2,6), spread=Math.max(20,P.S*2.2);
+    const centers=Array.from({length:nClump},()=>({x:Math.random()*W,y:Math.random()*H}));
+    blobs=Array.from({length:P.B},()=>{const c=centers[Math.floor(Math.random()*nClump)];
+      const r=Math.max(2,P.S*(0.5+0.9*Math.random()));
+      return {x:wrap(c.x+randn()*spread,W),y:wrap(c.y+randn()*spread,H),r,r0:r,cSum:0,cN:0,worked:false};});
+  }
+  agents=Array.from({length:P.N},()=>({x:Math.random()*W,y:Math.random()*H,active:0,onFood:false,deg:0,st:'explore'}));
+  clearPanels(); clearWindow();
+  // panel 5: all pairwise toroidal distances between resources = the resource-gap distribution (heavy-tailed because clumped)
+  resGaps=[];for(let i=0;i<blobs.length;i++)for(let j=i+1;j<blobs.length;j++)resGaps.push(tDist(blobs[i].x,blobs[i].y,blobs[j].x,blobs[j].y));
+  // panel 8: two illustrative search paths from a common origin (Lévy vs near-Brownian)
+  const gp=al=>{const o=P.AL;P.AL=al;let x=0,y=0;const p=[[0,0]];for(let i=0;i<70;i++){x+=levy();y+=levy();p.push([x,y]);}P.AL=o;return p;};
+  levyPath=gp(1.35); brownPath=gp(1.95);
+}
+
+// ---- one tick ----
+function step(){
+  const N=agents.length,R=P.R,PHI=P.PHI;
+  let distTick=0, consTick=0;   // distance travelled & resource consumed this tick (live foraging efficiency)
+  for(const b of blobs) b.r=Math.min(b.r0,b.r+REGROW);   // regrowth (keeps the cycle alive)
+  for(const a of agents){ if(a.active){ if(!a.onFood){const bx=randn()*P.VX,by=randn()*P.VX;a.x=wrap(a.x+bx,W);a.y=wrap(a.y+by,H);distTick+=Math.hypot(bx,by);} } // consumers hold
+    else{const sx=levy(),sy=levy();a.x=wrap(a.x+sx,W);a.y=wrap(a.y+sy,H);distTick+=Math.hypot(sx,sy);   // record explorer Lévy step lengths (panel 5)
+      if(stepLens.length<4000&&Math.random()<0.5)stepLens.push(Math.hypot(sx,sy));} }
+  for(const a of agents){ a.onFood=false;
+    for(const b of blobs){ if(b.r>0.5&&tDist(a.x,a.y,b.x,b.y)<=b.r){a.onFood=true;consTick+=Math.min(0.6,b.r);b.r=Math.max(0,b.r-0.6);break;} }
+    a.active=a.onFood?1:0; }
+  const deg=new Int16Array(N),act=new Int16Array(N);
+  for(let i=0;i<N;i++)for(let j=i+1;j<N;j++)
+    if(tDist(agents[i].x,agents[i].y,agents[j].x,agents[j].y)<=R){deg[i]++;deg[j]++;}
+  let n0=0;for(let i=0;i<N;i++)if(agents[i].active)n0++;const gens=[n0];   // generation 0 = seeds (on food)
+  let changed=true,guard=0;
+  while(changed&&guard++<60){ changed=false;let nNew=0;
+    for(let i=0;i<N;i++)act[i]=0;
+    for(let i=0;i<N;i++)for(let j=i+1;j<N;j++)
+      if(tDist(agents[i].x,agents[i].y,agents[j].x,agents[j].y)<=R){ if(agents[j].active)act[i]++; if(agents[i].active)act[j]++; }
+    for(let i=0;i<N;i++) if(!agents[i].active&&deg[i]>0&&act[i]/deg[i]>=PHI){agents[i].active=1;changed=true;nNew++;}
+    if(nNew>0)gens.push(nNew);
+  }
+  // panel 6: branching ratio σ = total descendants / total ancestors across cascade generations; poised near 1 = SOC
+  if(gens.length>1&&n0>0){let anc=0,desc=0;for(let g=0;g<gens.length-1;g++)anc+=gens[g];for(let g=1;g<gens.length;g++)desc+=gens[g];
+    if(anc>0){sigmaSeries.push(desc/anc);if(sigmaSeries.length>240)sigmaSeries.shift();}}
+  agents.forEach((a,i)=>a.deg=deg[i]);
+  // recruited agents funnel toward on-food neighbours (up the cascade to the resource); else toward the active centroid
+  for(let i=0;i<N;i++){const a=agents[i];if(!a.active||a.onFood)continue;
+    let fx=0,fy=0,fn=0,cx=0,cy=0,cn=0;
+    for(let j=0;j<N;j++){if(j===i||!agents[j].active)continue;
+      if(tDist(a.x,a.y,agents[j].x,agents[j].y)<=R){const dx=tDelta(a.x,agents[j].x,W),dy=tDelta(a.y,agents[j].y,H);
+        cx+=dx;cy+=dy;cn++;if(agents[j].onFood){fx+=dx;fy+=dy;fn++;}}}
+    if(fn){a.x=wrap(a.x+0.20*fx/fn,W);a.y=wrap(a.y+0.20*fy/fn,H);}
+    else if(cn){a.x=wrap(a.x+0.11*cx/cn,W);a.y=wrap(a.y+0.11*cy/cn,H);}}
+  // classify + metrics
+  let nA=0,zSum=0,nAD=0,cE=0,cR=0,cC=0,cB=0;
+  for(let i=0;i<N;i++){const a=agents[i];
+    if(a.active){a.st=a.onFood?'consume':'recruit';nA++;zSum+=deg[i];nAD++;if(a.onFood)cC++;else cR++;}
+    else{a.st=(act[i]>0)?'blocked':'explore';if(act[i]>0)cB++;else cE++;}}
+  const A=nA/N, z=nAD?zSum/nAD:0;
+  compBuf.push([cE/N,cR/N,cC/N,cB/N]);if(compBuf.length>240)compBuf.shift();   // panel 7: state composition over time
+  // panel 8: accumulate this preset's cost profile (skip burn-in after a preset switch); persists across presets
+  tickSince++;
+  if(tickSince>40){const e=costProfiles[curPreset]||(costProfiles[curPreset]={c:0,h:0,m:0,n:0});e.c+=nA;e.h+=consTick;e.m+=distTick;e.n++;}
+  // (0) cascade window (Fig 1): active fraction binned by ENDOGENOUS connectivity z_local. The drive-avalanche
+  // cycle sweeps z on its own (ignite low-z -> recruit -> crowd high-z -> disperse), so the inverted-U emerges
+  // from self-organization -- no external parameter sweep needed.
+  if(nA>0){const wi=clamp(Math.floor(z/ZMAX*WBINS),0,WBINS-1);winSum[wi]+=A;winCnt[wi]++;}
+  // (1) phase portrait: state-composition field + mean-flow field (from tick-to-tick displacement)
+  if(nA>0){const gi=clamp(Math.floor(z/ZMAX*GX),0,GX-1),gj=clamp(Math.floor(A*GY),0,GY-1),k=gj*GX+gi;
+    occ[k]++;mR[k]+=cR/N;mC[k]+=cC/N;mB[k]+=cB/N;mE[k]+=cE/N;
+    trail.push([z,A]);if(trail.length>50)trail.shift();
+    if(prevZA){const dz=z-prevZA[0],da=A-prevZA[1];
+      const fi=clamp(Math.floor(prevZA[0]/ZMAX*FGX),0,FGX-1),fj=clamp(Math.floor(prevZA[1]*FGY),0,FGY-1),fk=fj*FGX+fi;
+      fU[fk]+=dz;fV[fk]+=da;fC[fk]++;}
+    prevZA=[z,A];
+  } else { prevZA=null; }
+  // (2) recruited-cluster sizes (connected components of active agents) -> CCDF
+  const actIdx=[];for(let i=0;i<N;i++)if(agents[i].active)actIdx.push(i);
+  const parent={};actIdx.forEach(i=>parent[i]=i);
+  const find=x=>{while(parent[x]!==x){parent[x]=parent[parent[x]];x=parent[x];}return x;};
+  for(let p=0;p<actIdx.length;p++)for(let q=p+1;q<actIdx.length;q++){const i=actIdx[p],j=actIdx[q];
+    if(tDist(agents[i].x,agents[i].y,agents[j].x,agents[j].y)<=R){parent[find(i)]=find(j);}}
+  const comp={};actIdx.forEach(i=>{const r=find(i);comp[r]=(comp[r]||0)+1;});
+  for(const r in comp){const s=comp[r];sizeCounts.set(s,(sizeCounts.get(s)||0)+1);}
+  // (3) & (4): per-blob occupancy -> giving-up density + IFD matching
+  for(const b of blobs){ let committed=0;
+    for(const a of agents) if(a.active&&tDist(a.x,a.y,b.x,b.y)<=b.r0) committed++;
+    b.cSum+=committed;b.cN++;
+    if(committed>=2)b.worked=true;
+    if(b.worked&&committed===0){ if(b.r>0.3&&b.r0>0)guHist.push(b.r/b.r0); b.worked=false; }
+  }
+  tick++;
+  byId('readout').innerHTML=`tick <b>${tick}</b> &nbsp; z<sub>local</sub>=<b>${z.toFixed(1)}</b> &nbsp; A=<b>${A.toFixed(2)}</b>`+
+    `<br><span style="color:var(--grey)">■</span>${cE} <span style="color:var(--blue)">■</span>${cR} `+
+    `<span style="color:var(--green)">■</span>${cC} <span style="color:var(--red)">■</span>${cB}`;
+}
+const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
+
+// ---- rendering ----
+function axes(ctx,l,t,w,h){ctx.strokeStyle='#333';ctx.lineWidth=1;ctx.beginPath();
+  ctx.moveTo(l,t);ctx.lineTo(l,t+h);ctx.lineTo(l+w,t+h);ctx.stroke();}
+// label with a translucent white background so text never gets lost over the plot
+function tlabel(ctx,txt,x,y,color,font){ctx.font=font||'11px sans-serif';const wtxt=ctx.measureText(txt).width;
+  ctx.fillStyle='rgba(255,255,255,0.82)';ctx.fillRect(x-2,y-10,wtxt+4,13);ctx.fillStyle=color||'#333';ctx.fillText(txt,x,y);}
+function drawTorus(){ tx.clearRect(0,0,W,H);
+  for(const b of blobs){if(b.r<=0.5)continue;tx.beginPath();tx.arc(b.x,b.y,b.r,0,7);
+    tx.fillStyle='rgba(200,155,55,0.28)';tx.fill();tx.lineWidth=1.4;tx.strokeStyle='rgba(150,105,20,0.7)';tx.stroke();tx.lineWidth=1;}
+  tx.strokeStyle='rgba(20,55,170,0.34)';tx.lineWidth=1;tx.beginPath();
+  for(let i=0;i<agents.length;i++){if(!agents[i].active)continue;for(let j=i+1;j<agents.length;j++){
+    if(!agents[j].active)continue;const dx=agents[i].x-agents[j].x,dy=agents[i].y-agents[j].y;
+    if(Math.abs(dx)<P.R&&Math.abs(dy)<P.R&&Math.hypot(dx,dy)<=P.R){tx.moveTo(agents[i].x,agents[i].y);tx.lineTo(agents[j].x,agents[j].y);}}}
+  tx.stroke();
+  // draw explorers first, active states (recruit/consume/blocked) on top with larger dots + outline = high contrast
+  for(let pass=0;pass<2;pass++)for(const a of agents){const eng=(a.st!=='explore');if(eng!==(pass===1))continue;
+    const c=COL[a.st],isC=(a.st==='consume'),rad=(a.st==='explore')?3.4:isC?6:4.6;
+    if(isC){tx.beginPath();tx.arc(a.x,a.y,rad+1.8,0,7);tx.fillStyle='#fff';tx.fill();}  // white halo ring => consumers pop, unmistakable vs blue recruits
+    tx.beginPath();tx.arc(a.x,a.y,rad,0,7);tx.fillStyle=`rgb(${c[0]},${c[1]},${c[2]})`;tx.fill();
+    tx.lineWidth=eng?1.3:0.7;tx.strokeStyle=eng?'rgba(0,0,0,0.55)':'rgba(0,0,0,0.25)';tx.stroke();}
+}
+const PH_STATES=[['#8f8f8f',()=>mE],['#1f4fd8',()=>mR],['#c01515',()=>mB],['#1a7a1a',()=>mC]];
+let PHXM=20;   // phase-portrait display range on z; adapts to the data so the blocked regime (z~30) isn't off-screen
+function drawPhase(){const ctx=pxc,cw=pC.width,ch=pC.height,l=40,t=10,w=cw-l-12,h=ch-t-28;
+  ctx.clearRect(0,0,cw,ch);
+  let maxBin=0;for(let k=0;k<occ.length;k++)if(occ[k]>2){const gi=k%GX;if(gi>maxBin)maxBin=gi;}
+  PHXM=clamp((maxBin+1)/GX*ZMAX*1.12,15,ZMAX);   // fit the occupied z-range (window ~15, blocked ~28)
+  const X=z=>l+z/PHXM*w,Y=A=>t+h-A*h;
+  // --- state-composition "rich" regions (enrichment >= 1.5x each state's plane-average): smooth soft blobs, as in Fig 5b ---
+  if(!phaseOff){phaseOff=document.createElement('canvas');}
+  phaseOff.width=Math.max(1,w|0);phaseOff.height=Math.max(1,h|0);const octx=phaseOff.getContext('2d');
+  const colw=(ZMAX/GX)/PHXM*w,bh=h/GY,alphaOf={'#1a7a1a':0.6,'#1f4fd8':0.48,'#c01515':0.5,'#8f8f8f':0.6};
+  for(const [col,get] of PH_STATES){const fld=get();
+    // "state-rich" = cells above mean+0.8*std (z-score enrichment). Works for the DOMINANT explore state
+    // (whose 1.5x-mean rule would exceed 1 and never fire) as well as the sparse active states.
+    const vals=[];for(let k=0;k<occ.length;k++)if(occ[k]>=3)vals.push(fld[k]/occ[k]);
+    if(!vals.length)continue;const mean=vals.reduce((a,b)=>a+b,0)/vals.length;
+    const sd=Math.sqrt(vals.reduce((a,b)=>a+(b-mean)*(b-mean),0)/vals.length);
+    const thr=mean+0.8*sd;if(thr<=0)continue;
+    const m=new Uint8Array(GX*GY);
+    for(let k=0;k<occ.length;k++) if(occ[k]>=3&&fld[k]/occ[k]>=thr) m[k]=1;
+    const d=new Uint8Array(GX*GY);   // dilate once so scattered cells merge into coherent blobs
+    for(let gj=0;gj<GY;gj++)for(let gi=0;gi<GX;gi++){let any=0;
+      for(let dj=-1;dj<=1&&!any;dj++)for(let di=-1;di<=1;di++){const j=gj+dj,i=gi+di;
+        if(j>=0&&j<GY&&i>=0&&i<GX&&m[j*GX+i]){any=1;break;}}
+      d[gj*GX+gi]=any;}
+    octx.clearRect(0,0,w,h);octx.fillStyle=col;
+    for(let gj=0;gj<GY;gj++)for(let gi=0;gi<GX;gi++){if(!d[gj*GX+gi])continue;
+      const x0=(gi/GX*ZMAX)/PHXM*w;if(x0>=w)continue;octx.fillRect(x0-1,h-(gj+1)*bh-1,colw+2,bh+2);}
+    ctx.save();ctx.filter='blur(6px)';ctx.globalAlpha=alphaOf[col]||0.5;ctx.drawImage(phaseOff,l,t);ctx.restore();}
+  ctx.filter='none';ctx.globalAlpha=1;
+  // --- window boundaries ---
+  ctx.setLineDash([3,3]);ctx.strokeStyle='#999';ctx.lineWidth=1;
+  for(const zv of [ZC,2/P.PHI]){if(zv>PHXM)continue;ctx.beginPath();ctx.moveTo(X(zv),t);ctx.lineTo(X(zv),t+h);ctx.stroke();}
+  ctx.setLineDash([]);
+  // --- mean-flow arrows (the drive-avalanche cycle) ---
+  let maxsp=1e-9;const U=new Float32Array(FGX*FGY),V=new Float32Array(FGX*FGY);
+  for(let k=0;k<fC.length;k++)if(fC[k]>=4){U[k]=fU[k]/fC[k];V[k]=fV[k]/fC[k];
+    const s=Math.hypot(U[k]/PHXM,V[k]);if(s>maxsp)maxsp=s;}
+  const cwy=h/FGY,aL=1.05*Math.min(w/FGX,cwy);ctx.lineJoin='round';ctx.lineCap='round';
+  for(let gj=0;gj<FGY;gj++)for(let gi=0;gi<FGX;gi++){const k=gj*FGX+gi;if(fC[k]<4)continue;
+    const zc=(gi+0.5)/FGX*ZMAX;if(zc>PHXM)continue;
+    const ux=U[k]/PHXM,uy=V[k],sp=Math.hypot(ux,uy);if(sp<1e-7)continue;
+    const mcx=X(zc),mcy=t+h-(gj+0.5)*cwy;                                   // cell midpoint; draw arrow centred on it
+    const dxp=ux*w,dyp=-uy*h,plen=Math.hypot(dxp,dyp)||1,L=aL*(0.5+0.5*clamp(sp/maxsp,0,1));  // every arrow keeps a visible shaft
+    const ux2=dxp/plen,uy2=dyp/plen,cx=mcx-ux2*L/2,cy=mcy-uy2*L/2,ex=mcx+ux2*L/2,ey=mcy+uy2*L/2;
+    const ang=Math.atan2(ey-cy,ex-cx),hd=6;
+    const h1x=ex-hd*Math.cos(ang-0.45),h1y=ey-hd*Math.sin(ang-0.45),h2x=ex-hd*Math.cos(ang+0.45),h2y=ey-hd*Math.sin(ang+0.45);
+    for(let pass=0;pass<2;pass++){const halo=pass===0;   // white halo underneath, then dark arrow => visible on any colour
+      ctx.strokeStyle=halo?'rgba(255,255,255,0.9)':'rgba(70,70,74,0.82)';
+      ctx.fillStyle=halo?'rgba(255,255,255,0.9)':'rgba(70,70,74,0.82)';ctx.lineWidth=halo?4.2:2;
+      ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(ex,ey);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(ex,ey);ctx.lineTo(h1x,h1y);ctx.lineTo(h2x,h2y);ctx.closePath();ctx.fill();ctx.stroke();}}
+  // --- current operating point ---
+  if(trail.length){const p=trail[trail.length-1];ctx.fillStyle='#000';ctx.beginPath();ctx.arc(X(Math.min(p[0],PHXM)),Y(p[1]),3.2,0,7);ctx.fill();
+    ctx.strokeStyle='#fff';ctx.lineWidth=1;ctx.stroke();}
+  axes(ctx,l,t,w,h);ctx.fillStyle='#333';ctx.font='12px sans-serif';
+  ctx.textAlign='center';ctx.fillText('z_local (mean degree of active agents)',l+w/2,t+h+17);ctx.textAlign='left';
+  ctx.save();ctx.translate(12,t+h/2);ctx.rotate(-Math.PI/2);ctx.textAlign='center';ctx.fillText('active fraction A',0,0);ctx.textAlign='left';ctx.restore();
+}
+function drawCCDF(){const ctx=cxc,cw=cC.width,ch=cC.height,l=40,t=8,w=cw-l-10,h=ch-t-26;
+  ctx.clearRect(0,0,cw,ch);axes(ctx,l,t,w,h);
+  const sizes=[...sizeCounts.keys()].sort((a,b)=>a-b);let tot=0;sizeCounts.forEach(v=>tot+=v);
+  ctx.fillStyle='#333';ctx.font='12px sans-serif';ctx.textAlign='center';ctx.fillText('cluster size s (log)',l+w/2,t+h+17);ctx.textAlign='left';
+  ctx.save();ctx.translate(11,t+h/2);ctx.rotate(-Math.PI/2);ctx.fillText('P(S≥s) (log)',-30,0);ctx.restore();
+  if(tot<5||sizes.length<2)return;
+  const maxS=Math.max(sizes[sizes.length-1],P.N);const lx=s=>l+(Math.log10(s)/Math.log10(Math.max(maxS,10)))*w;
+  const minP=1/tot, ly=p=>t+h-(Math.log10(p)-Math.log10(minP))/(0-Math.log10(minP))*h;
+  const pts=[];let cum=tot;for(const s of sizes){pts.push([s,cum/tot]);cum-=sizeCounts.get(s);}
+  // power-law fit over the scaling region (s in [2, N/2], above the noise floor)
+  const X=[],Y=[];for(const [s,p] of pts){if(s>=2&&s<=0.5*P.N&&p>1.6*minP){X.push(Math.log10(s));Y.push(Math.log10(p));}}
+  if(X.length>=4){let sx=0,sy=0,sxx=0,sxy=0;const n=X.length;for(let i=0;i<n;i++){sx+=X[i];sy+=Y[i];sxx+=X[i]*X[i];sxy+=X[i]*Y[i];}
+    const b=(n*sxy-sx*sy)/(n*sxx-sx*sx),a=(sy-b*sx)/n,fit=s=>Math.pow(10,a+b*Math.log10(s)),yy=s=>ly(fit(s));
+    // cutoff scale s_c: where the data first drops to <1/e of the power-law fit (the exponential-cutoff knee, << N)
+    let sc=0;for(const [s,p] of pts){if(s>=3&&p>0&&p<0.368*fit(s)){sc=s;break;}}
+    if(sc>0){const xc=lx(sc);ctx.setLineDash([4,3]);ctx.strokeStyle='#c8922a';ctx.lineWidth=1.3;ctx.beginPath();ctx.moveTo(xc,t);ctx.lineTo(xc,t+h);ctx.stroke();ctx.setLineDash([]);
+      tlabel(ctx,'s_c cutoff ('+sc+')',clamp(xc+3,l+2,l+w-78),t+h-3,'#c8922a','10px sans-serif');}
+    ctx.strokeStyle='#c81e1e';ctx.lineWidth=1.7;ctx.beginPath();ctx.moveTo(lx(2),clamp(yy(2),t,t+h));ctx.lineTo(lx(sc>0?sc:0.5*P.N),clamp(yy(sc>0?sc:0.5*P.N),t,t+h));ctx.stroke();
+    tlabel(ctx,'power law: slope≈'+b.toFixed(2)+'  (τ≈'+(1-b).toFixed(2)+')',l+6,t+12,'#c81e1e','11px sans-serif');}
+  ctx.fillStyle='#1f4fd8';for(const [s,p] of pts){ctx.beginPath();ctx.arc(lx(s),clamp(ly(p),t,t+h),2,0,7);ctx.fill();}
+}
+function drawGUD(){const ctx=gxc,cw=gC.width,ch=gC.height,l=34,t=8,w=cw-l-10,h=ch-t-26;
+  ctx.clearRect(0,0,cw,ch);axes(ctx,l,t,w,h);
+  ctx.fillStyle='#333';ctx.font='12px sans-serif';ctx.textAlign='center';ctx.fillText('resource left at departure',l+w/2,t+h+17);ctx.textAlign='left';
+  const NB=16,bins=new Array(NB).fill(0);for(const g of guHist){const k=clamp(Math.floor(g*NB),0,NB-1);bins[k]++;}
+  const mx=Math.max(1,...bins),bw=w/NB;
+  ctx.fillStyle='#1a7a1a';for(let k=0;k<NB;k++){const bh=bins[k]/mx*h;ctx.fillRect(l+k*bw+0.5,t+h-bh,bw-1,bh);}
+  if(guHist.length>3){const sorted=[...guHist].sort((a,b)=>a-b),med=sorted[sorted.length>>1];
+    const x=l+med*w;ctx.strokeStyle='#000';ctx.setLineDash([4,3]);ctx.beginPath();ctx.moveTo(x,t);ctx.lineTo(x,t+h);ctx.stroke();ctx.setLineDash([]);
+    tlabel(ctx,'median '+med.toFixed(2)+' — leave before empty',l+4,t+10,'#000','12px sans-serif');}
+}
+function drawIFD(){const ctx=ixc,cw=iC.width,ch=iC.height,l=36,t=8,w=cw-l-10,h=ch-t-26;
+  ctx.clearRect(0,0,cw,ch);axes(ctx,l,t,w,h);
+  ctx.fillStyle='#333';ctx.font='12px sans-serif';ctx.textAlign='center';ctx.fillText('patch richness (log)',l+w/2,t+h+17);ctx.textAlign='left';
+  ctx.save();ctx.translate(11,t+h/2);ctx.rotate(-Math.PI/2);ctx.fillText('mean committed (log)',-42,0);ctx.restore();
+  const pts=blobs.filter(b=>b.cN>0&&b.r0>0).map(b=>[Math.log10(b.r0),Math.log10(Math.max(0.3,b.cSum/b.cN))]);
+  if(pts.length<2)return;
+  const xs=pts.map(p=>p[0]),ys=pts.map(p=>p[1]);
+  const xmin=Math.min(...xs),xmax=Math.max(...xs)+1e-6,ymin=Math.min(...ys)-0.2,ymax=Math.max(...ys)+0.2;
+  const X=x=>l+(x-xmin)/(xmax-xmin)*w,Y=y=>t+h-(y-ymin)/(ymax-ymin)*h;
+  // slope-1 (ideal) reference through the centroid
+  const mxx=xs.reduce((a,b)=>a+b,0)/xs.length,myy=ys.reduce((a,b)=>a+b,0)/ys.length;
+  ctx.strokeStyle='#aaa';ctx.setLineDash([4,3]);ctx.beginPath();
+  ctx.moveTo(X(xmin),Y(myy+(xmin-mxx)));ctx.lineTo(X(xmax),Y(myy+(xmax-mxx)));ctx.stroke();ctx.setLineDash([]);
+  ctx.fillStyle='#c81e1e';for(const p of pts){ctx.beginPath();ctx.arc(X(p[0]),clamp(Y(p[1]),t,t+h),2.6,0,7);ctx.fill();}
+  tlabel(ctx,'dashed = ideal (slope 1)',l+4,t+10,'#666','11px sans-serif');
+}
+function drawWindow(){const ctx=wxc,cw=wC.width,ch=wC.height,l=42,t=10,w=cw-l-12,h=ch-t-30;
+  ctx.clearRect(0,0,cw,ch);const WXMAX=22;
+  const pts=[];let amax=0.2;for(let i=0;i<WBINS;i++)if(winCnt[i]>=6){const a=winSum[i]/winCnt[i];if(a>amax)amax=a;pts.push([(i+0.5)/WBINS*ZMAX,a]);}
+  const X=z=>l+z/WXMAX*w,Y=a=>t+h-a/amax*h;
+  // shaded cascade window (z_c .. 2/phi) + boundaries
+  const xa=X(ZC),xb=X(Math.min(WXMAX,2/P.PHI));
+  ctx.fillStyle='rgba(31,79,216,0.07)';ctx.fillRect(xa,t,xb-xa,h);
+  ctx.setLineDash([3,3]);ctx.strokeStyle='#999';ctx.lineWidth=1;
+  for(const [zv,lab] of [[ZC,'z_c'],[2/P.PHI,'2/φ']]){if(zv>WXMAX)continue;const x=X(zv);
+    ctx.beginPath();ctx.moveTo(x,t);ctx.lineTo(x,t+h);ctx.stroke();
+    ctx.setLineDash([]);ctx.fillStyle='#888';ctx.font='11px sans-serif';ctx.fillText(lab,x+2,t+11);ctx.setLineDash([3,3]);}
+  ctx.setLineDash([]);
+  axes(ctx,l,t,w,h);
+  if(pts.length>1){ctx.strokeStyle='#1250f0';ctx.lineWidth=2;ctx.beginPath();
+    pts.forEach((p,i)=>{const x=X(p[0]),y=Y(p[1]);i?ctx.lineTo(x,y):ctx.moveTo(x,y);});ctx.stroke();}
+  ctx.fillStyle='#1250f0';for(const p of pts){ctx.beginPath();ctx.arc(X(p[0]),Y(p[1]),2.3,0,7);ctx.fill();}
+  ctx.fillStyle='#333';ctx.font='12px sans-serif';ctx.textAlign='center';ctx.fillText('connectivity z_local (mean degree of active agents)',l+w/2,t+h+18);
+  ctx.save();ctx.translate(13,t+h/2);ctx.rotate(-Math.PI/2);ctx.fillText('active fraction A',0,0);ctx.restore();ctx.textAlign='left';
+  if(pts.length<4){ctx.fillStyle='#999';ctx.font='11px sans-serif';ctx.fillText('the cycle traces this as it runs…',l+6,t+13);}
+}
+// panel 5: STATIC offline result (paper Fig. 12) -- optimal search exponent vs field clustering.
+// Foraging efficiency vs Lévy stable index alpha for a strongly-clustered vs a diffuse field; the optimum
+// is heavy-tailed (alpha~1) and shifts ballistic (alpha~0.3) as clustering grows. The live 16-target swarm
+// can't resolve this, so it is measured offline (destructive lone-searcher sweep, 8x10 replicas).
+// Clark–Evans clumpiness index of the live resource field: mean nearest-neighbour distance / expected
+// under a uniform (Poisson) field. R<1 clustered, R≈1 random, R>1 dispersed. Measured from current blobs.
+function fieldClumpIndex(){const n=blobs.length;if(n<3)return null;let sum=0;
+  for(let i=0;i<n;i++){let best=1e9;for(let j=0;j<n;j++)if(i!==j){const dd=tDist(blobs[i].x,blobs[i].y,blobs[j].x,blobs[j].y);if(dd<best)best=dd;}sum+=best;}
+  const meanNN=sum/n,dens=n/(W*H);return meanNN/(0.5/Math.sqrt(dens));}
+const ME_A=[0.1,0.258,0.417,0.575,0.733,0.892,1.05,1.208,1.367,1.525,1.683,1.842,2.0];
+const ME_CLUMP=[0.745,1.0,0.942,0.737,0.724,0.658,0.697,0.684,0.522,0.525,0.571,0.412,0.345];  // D_f=0.26 (strongly clustered)
+const ME_DIFF =[0.81,0.818,0.804,0.784,0.757,0.859,0.94,0.973,1.0,0.937,0.862,0.792,0.678];     // D_f=1.12 (diffuse)
+function drawMaxEnt(){const ctx=mexc,cw=meC.width,ch=meC.height,l=40,t=12,w=cw-l-12,h=ch-t-30;
+  ctx.clearRect(0,0,cw,ch);
+  const X=a=>l+(a-0.1)/(2.0-0.1)*w,Y=v=>t+h-(v-0.35)/(1.03-0.35)*h;
+  ctx.fillStyle='rgba(120,120,120,0.14)';ctx.fillRect(X(0.8),t,X(1.2)-X(0.8),h);   // inverse-square band
+  axes(ctx,l,t,w,h);
+  const line=(arr,col)=>{ctx.strokeStyle=col;ctx.lineWidth=2;ctx.beginPath();
+    arr.forEach((v,i)=>{const x=X(ME_A[i]),y=Y(v);i?ctx.lineTo(x,y):ctx.moveTo(x,y);});ctx.stroke();
+    ctx.fillStyle=col;let mi=0;arr.forEach((v,i)=>{if(v>arr[mi])mi=i;});ctx.beginPath();ctx.arc(X(ME_A[mi]),Y(arr[mi]),3.2,0,7);ctx.fill();};
+  line(ME_DIFF,'#0a982d'); line(ME_CLUMP,'#c01515');
+  // --- LIVE overlay: current demo Lévy exponent + measured clumpiness of the running field ---
+  const ax=X(clamp(P.AL,0.1,2.0));
+  ctx.strokeStyle='rgba(20,20,20,0.7)';ctx.setLineDash([5,3]);ctx.lineWidth=1.6;ctx.beginPath();ctx.moveTo(ax,t);ctx.lineTo(ax,t+h);ctx.stroke();ctx.setLineDash([]);
+  // LIVE dot: the running demo's measured foraging efficiency (consumed/distance) at its current alpha
+  // the dot sits ON the curve that matches the LIVE field (clumped=red, ~uniform=green), at the current alpha
+  const R=fieldClumpIndex();
+  const clumped=(R!=null&&R<0.85), curve=clumped?ME_CLUMP:ME_DIFF, dotcol=clumped?'#c01515':'#0a982d';
+  const av=clamp(P.AL,ME_A[0],ME_A[ME_A.length-1]); let vy=curve[0];
+  for(let i=0;i<ME_A.length-1;i++){if(av>=ME_A[i]&&av<=ME_A[i+1]){const f=(av-ME_A[i])/(ME_A[i+1]-ME_A[i]);vy=curve[i]+f*(curve[i+1]-curve[i]);break;}}
+  ctx.beginPath();ctx.arc(ax,Y(vy),6,0,7);ctx.fillStyle=dotcol;ctx.fill();ctx.lineWidth=2;ctx.strokeStyle='#fff';ctx.stroke();
+  tlabel(ctx,'● predicted: '+(clumped?'clumped':'~uniform')+' field × α='+P.AL.toFixed(2),clamp(ax-78,l+2,l+w-168),t+11,dotcol,'11px sans-serif');
+  if(R!=null)tlabel(ctx,'live field R='+R.toFixed(2)+' → '+(clumped?'red':'green')+' curve',l+6,t+24,'#333','11px sans-serif');
+  tlabel(ctx,'■ clustered → ballistic (α≈0.3)',l+6,t+h-24,'#c01515','11px sans-serif');
+  tlabel(ctx,'■ diffuse → inverse-square (α≈1.3)',l+6,t+h-9,'#0a982d','11px sans-serif');
+  ctx.fillStyle='#333';ctx.font='12px sans-serif';ctx.textAlign='center';ctx.fillText('Lévy index α  (ballistic ← → Brownian)',l+w/2,t+h+18);
+  ctx.save();ctx.translate(13,t+h/2);ctx.rotate(-Math.PI/2);ctx.fillText('efficiency η',0,0);ctx.restore();ctx.textAlign='left';}
+// panel 6: branching ratio sigma over cascades, poised just below the critical line 1
+function drawSigma(){const ctx=sgxc,cw=sgC.width,ch=sgC.height,l=34,t=10,w=cw-l-12,h=ch-t-30;
+  ctx.clearRect(0,0,cw,ch);const ymax=1.6,Y=v=>t+h-clamp(v,0,ymax)/ymax*h;
+  ctx.strokeStyle='#e41616';ctx.setLineDash([4,3]);ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(l,Y(1));ctx.lineTo(l+w,Y(1));ctx.stroke();ctx.setLineDash([]);
+  tlabel(ctx,'σ=1 (critical)',l+w-82,Y(1)-4,'#e41616','11px sans-serif');
+  axes(ctx,l,t,w,h);
+  if(sigmaSeries.length>1){const nn=sigmaSeries.length;
+    ctx.strokeStyle='rgba(18,80,240,0.20)';ctx.lineWidth=1;ctx.beginPath();   // raw (faint)
+    sigmaSeries.forEach((s,i)=>{const x=l+i/(nn-1)*w,y=Y(s);i?ctx.lineTo(x,y):ctx.moveTo(x,y);});ctx.stroke();
+    const win=8,sm=[];for(let i=0;i<nn;i++){let a=0,c=0;for(let j=-win;j<=win;j++){const k=i+j;if(k>=0&&k<nn){a+=sigmaSeries[k];c++;}}sm.push(a/c);}
+    ctx.strokeStyle='#1250f0';ctx.lineWidth=2.2;ctx.beginPath();   // smoothed (bold)
+    sm.forEach((s,i)=>{const x=l+i/(nn-1)*w,y=Y(s);i?ctx.lineTo(x,y):ctx.moveTo(x,y);});ctx.stroke();
+    const mn=sigmaSeries.reduce((a,b)=>a+b,0)/nn;
+    ctx.strokeStyle='#111';ctx.setLineDash([2,2]);ctx.beginPath();ctx.moveTo(l,Y(mn));ctx.lineTo(l+w,Y(mn));ctx.stroke();ctx.setLineDash([]);
+    tlabel(ctx,'⟨σ⟩='+mn.toFixed(2),l+6,t+13,'#111','12px sans-serif');}
+  ctx.fillStyle='#333';ctx.font='11px sans-serif';ctx.textAlign='right';ctx.fillText('1.5',l-3,Y(1.5)+4);ctx.fillText('1',l-3,Y(1)+4);ctx.fillText('0',l-3,Y(0)+4);ctx.textAlign='center';
+  ctx.font='12px sans-serif';ctx.fillText('cascades over time →',l+w/2,t+h+18);ctx.textAlign='left';}
+// panel 7: four state fractions over time on a LOG y-axis, so the small consume (green) band stays visible
+function drawComp(){const ctx=cpxc,cw=cpC.width,ch=cpC.height,l=40,t=22,w=cw-l-12,h=ch-t-30;
+  ctx.clearRect(0,0,cw,ch);const n=compBuf.length,ymin=0.003;
+  const Y=v=>t+h-(Math.log10(clamp(v,ymin,1))-Math.log10(ymin))/(0-Math.log10(ymin))*h;
+  ctx.strokeStyle='#eee';ctx.lineWidth=1;for(const gv of [0.01,0.1,1]){const y=Y(gv);ctx.beginPath();ctx.moveTo(l,y);ctx.lineTo(l+w,y);ctx.stroke();}
+  axes(ctx,l,t,w,h);
+  const S=[['#7d7d82','explore'],['#1250f0','recruit'],['#0a982d','consume'],['#e41616','blocked']];
+  if(n>1){const X=i=>l+i/(n-1)*w,sm=(i,s)=>{let a=0,c=0;for(let j=-7;j<=7;j++){const k=i+j;if(k>=0&&k<n){a+=compBuf[k][s];c++;}}return a/c;};
+    for(let s=0;s<4;s++){ctx.strokeStyle=S[s][0];ctx.lineWidth=s===2?2.3:1.5;ctx.beginPath();
+      for(let i=0;i<n;i++){const x=X(i),y=Y(sm(i,s));i?ctx.lineTo(x,y):ctx.moveTo(x,y);}ctx.stroke();}}
+  ctx.fillStyle='#333';ctx.font='11px sans-serif';ctx.textAlign='right';
+  ctx.fillText('1',l-3,Y(1)+4);ctx.fillText('.1',l-3,Y(0.1)+4);ctx.fillText('.01',l-3,Y(0.01)+4);ctx.textAlign='left';
+  for(let s=0;s<4;s++)tlabel(ctx,'■'+S[s][1],l+2+s*62,t-8,S[s][0],'10px sans-serif');
+  ctx.fillStyle='#333';ctx.font='12px sans-serif';ctx.textAlign='center';ctx.fillText('time →',l+w/2,t+h+18);ctx.textAlign='left';}
+// panel 8: cost-profile SCATTER, one persisted point per preset visited -- comms-per-harvest (x) vs
+// movement-per-harvest (y), both log. Comm.-efficient lands far left; Movement-efficient lands low;
+// lower-left = cheaper per unit food. Points persist across preset switches (cleared by "Clear panels").
+const CP_SHORT={sub:'sub',window:'window',blocked:'blocked',brown:'brown',moveff:'heavy-tail',commeff:'comm-eff',uniform:'uniform',custom:'custom'};
+const CP_COL={window:'#1250f0',commeff:'#c81e1e',moveff:'#c8922a',blocked:'#8a2be2',sub:'#7d7d82',brown:'#0a982d',uniform:'#e07b00',custom:'#333'};
+function drawCost(){const ctx=paxc,cw=paC.width,ch=paC.height,l=46,t=16,w=cw-l-14,h=ch-t-36;
+  ctx.clearRect(0,0,cw,ch);
+  const X0=0.5,X1=200,Y0=5,Y1=5000;
+  const LX=v=>l+(Math.log10(clamp(v,X0,X1))-Math.log10(X0))/(Math.log10(X1)-Math.log10(X0))*w;
+  const LY=v=>t+h-(Math.log10(clamp(v,Y0,Y1))-Math.log10(Y0))/(Math.log10(Y1)-Math.log10(Y0))*h;
+  ctx.strokeStyle='#eee';ctx.lineWidth=1;
+  for(const gx of [1,10,100]){ctx.beginPath();ctx.moveTo(LX(gx),t);ctx.lineTo(LX(gx),t+h);ctx.stroke();}
+  for(const gy of [10,100,1000]){ctx.beginPath();ctx.moveTo(l,LY(gy));ctx.lineTo(l+w,LY(gy));ctx.stroke();}
+  axes(ctx,l,t,w,h);
+  for(const k in costProfiles){const e=costProfiles[k];if(e.n<5||e.h<=0)continue;
+    const x=LX((e.c/e.h)),y=LY((e.m/e.h)),col=CP_COL[k]||'#333',cur=(k===curPreset);   // c/h and m/h are ratios of sums = mean ratios
+    ctx.beginPath();ctx.arc(x,y,cur?6:4.5,0,7);ctx.fillStyle=col;ctx.fill();ctx.lineWidth=cur?2:1;ctx.strokeStyle=cur?'#000':'#fff';ctx.stroke();
+    tlabel(ctx,CP_SHORT[k]||k,clamp(x+7,l,l+w-52),clamp(y+3,t+9,t+h-2),col,'10px sans-serif');}
+  ctx.fillStyle='#333';ctx.font='10px sans-serif';ctx.textAlign='right';for(const gy of [10,100,1000])ctx.fillText(''+gy,l-3,LY(gy)+3);
+  ctx.textAlign='center';for(const gx of [1,10,100])ctx.fillText(''+gx,LX(gx),t+h+12);
+  ctx.font='11px sans-serif';ctx.fillText('comms per harvest (log)',l+w/2,t+h+25);
+  ctx.save();ctx.translate(13,t+h/2);ctx.rotate(-Math.PI/2);ctx.fillText('movement per harvest (log)',0,0);ctx.restore();ctx.textAlign='left';
+  tlabel(ctx,'↙ cheaper per unit food · click presets to compare',l+4,t+11,'#888','10px sans-serif');}
+function render(){drawTorus();drawPhase();drawWindow();drawCCDF();drawGUD();drawIFD();drawMaxEnt();drawSigma();drawComp();drawCost();}
+
+// ---- loop / controls ----
+function loop(){if(!paused){step();render();}timer=setTimeout(loop,1000/P.TPS);}
+function restart(){if(timer)clearTimeout(timer);init();paused=false;byId('pause').textContent='Pause';render();loop();}
+function setSlider(id,key,fmt){const el=byId(id);if(!el)return;el.value=P[key];const o=byId(id+'v');if(o)o.textContent=fmt?fmt(P[key]):P[key];}
+function applyPreset(k){const pr=PRESETS[k];if(!pr)return;
+  curPreset=k;tickSince=0;   // panel-8 cost profile now accumulates for this preset
+  P.N=pr.N||100;P.B=16;P.S=16;P.PHI=0.15;P.R=pr.R;P.AL=pr.AL;P.VE=pr.VE||24;P.SCATTER=pr.scatter?1:0;
+  setSlider('N','N');setSlider('B','B');setSlider('S','S');setSlider('R','R');setSlider('VE','VE');
+  setSlider('PHI','PHI',v=>v.toFixed(2));setSlider('AL','AL',v=>v.toFixed(2));
+  document.querySelectorAll('#presets button').forEach(b=>b.classList.toggle('on',b.dataset.p===k));
+  const win=[ZC,2/P.PHI];
+  byId('regime').innerHTML=`<b>${pr.name}</b><br>window is z<sub>local</sub>∈(<b>${win[0].toFixed(1)}</b>,<b>${win[1].toFixed(1)}</b>)`;
+  restart();
+}
+function bind(id,key,fmt){const el=byId(id),out=byId(id+'v');
+  el.addEventListener('input',()=>{P[key]=parseFloat(el.value);out.textContent=fmt?fmt(P[key]):el.value;
+    curPreset='custom';tickSince=0;
+    document.querySelectorAll('#presets button').forEach(b=>b.classList.remove('on'));});}
+bind('N','N');bind('B','B');bind('S','S');bind('R','R');
+bind('PHI','PHI',v=>v.toFixed(2));bind('AL','AL',v=>v.toFixed(2));bind('VE','VE');bind('VX','VX');bind('TPS','TPS');
+document.querySelectorAll('#presets button').forEach(b=>b.addEventListener('click',()=>applyPreset(b.dataset.p)));
+byId('start').addEventListener('click',restart);
+byId('pause').addEventListener('click',e=>{paused=!paused;e.target.textContent=paused?'Resume':'Pause';});
+byId('clearP').addEventListener('click',()=>{clearPanels();clearWindow();costProfiles={};tickSince=0;});
+applyPreset('window');   // open in the interesting regime
+</script>
+</body>
+</html>
