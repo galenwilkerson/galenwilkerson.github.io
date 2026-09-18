@@ -78,6 +78,10 @@
       <div class="t">The cascade window <small>— active fraction vs endogenous z (Fig. 1)</small></div>
       <canvas id="winfig" width="440" height="214"></canvas>
     </div>
+    <div class="cell" title="Distribution of the swarm's actual exploration step lengths — one data point per move. In the poised regime it is heavy-tailed (Lévy): mostly short steps with rare long jumps (roughly a straight line on these log–log axes). Switch to the Brownian preset and it concentrates — no long jumps.">
+      <div class="t">Step-length distribution <small>— real moves: Lévy vs Brownian</small></div>
+      <canvas id="trans" width="440" height="214"></canvas>
+    </div>
     </div>
 
     <div class="grid">
@@ -93,11 +97,9 @@
         <canvas id="maxent" width="348" height="206"></canvas></div>
       <div class="cell" title="Offspring per active agent, per cascade. Poised just below σ=1 (critical) — self-organized criticality, reached with no tuning."><div class="t">6 · Branching ratio σ <small>— poised near critical (SOC)</small></div>
         <canvas id="sigma" width="348" height="206"></canvas></div>
-      <div class="cell" title="Distance from start over time for pure Lévy vs Brownian walkers (free space). Heavy-tailed Lévy superdiffuses — it covers ground far faster than Brownian diffusion. Drag the α slider to watch the gap open and close."><div class="t">7 · Transport: Lévy vs Brownian <small>— distance from start over time</small></div>
-        <canvas id="trans" width="348" height="206"></canvas></div>
-      <div class="cell" title="The four state fractions over time — explore / recruit / consume / blocked cycling: the drive–avalanche loop in the time domain."><div class="t">8 · State composition <small>— the drive–avalanche cycle in time</small></div>
+      <div class="cell" title="The four state fractions over time — explore / recruit / consume / blocked cycling: the drive–avalanche loop in the time domain."><div class="t">7 · State composition <small>— the drive–avalanche cycle in time</small></div>
         <canvas id="comp" width="348" height="206"></canvas></div>
-      <div class="cell" title="Movement vs communication cost per unit food, one point per preset (lower-left = cheaper). Recruitment adds message cost but is movement-neutral."><div class="t">9 · Cost profile per preset <small>— comms vs movement, per harvest</small></div>
+      <div class="cell" title="Movement vs communication cost per unit food, one point per preset (lower-left = cheaper). Recruitment adds message cost but is movement-neutral."><div class="t">8 · Cost profile per preset <small>— comms vs movement, per harvest</small></div>
         <canvas id="paths" width="348" height="206"></canvas></div>
     </div>
     </div><!--/main-->
@@ -135,7 +137,7 @@ const PRESETS={
   sub:    {name:'Sub-percolation — pure foraging (cascades die at birth)', N:100, R:28, AL:1.5, VE:24},
   window: {name:'Cascade window — recruit, converge, self-limit, release', N:100, R:52, AL:1.2, VE:24},
   blocked:{name:'Blocked — graph so dense a/k rarely reaches φ', N:100, R:116, AL:1.5, VE:24},
-  hetero: {name:'Heterogeneous φ — graded blocking (agents draw φ from φ±δφ; a few block first, more with density; efficiency & criticality unchanged — a paper sweep result)', N:100, R:60, AL:1.2, VE:24, PHI:0.20, DPHI:0.07},
+  hetero: {name:'Heterogeneous φ — cascade window with graded blocking (agents draw φ from φ±δφ; a few block first, more with density; efficiency & criticality unchanged — a paper sweep result)', N:100, R:52, AL:1.2, VE:24, PHI:0.15, DPHI:0.05},
   brown:  {name:'Brownian search — window connectivity, no long hops', N:100, R:52, AL:1.9, VE:24},
   moveff: {name:'Heavy-tail search — most search-efficient, but travel-heavy (recruitment is movement-neutral)', N:100, R:60, AL:1.1, VE:30},
   commeff:{name:'Communication-efficient — sparse graph, cheap local cascades', N:80,  R:50, AL:1.5, VE:24},
@@ -162,7 +164,7 @@ let occ,mR,mC,mB,mE, trail=[], fU,fV,fC, prevZA=null, phaseOff=null;
 // ---- coincidence accumulators ----
 let sizeCounts, guHist;                 // CCDF sizes, giving-up densities
 let stepLens, resGaps, sigmaSeries, compBuf, levyPath, brownPath;   // panels 5-8
-let levyWalk, brownWalk, transSeries;                                // transport panel: Lévy vs Brownian tracers
+let stepLevyLen, stepBrownLen;                                       // transport panel: Lévy vs Brownian step-length samples
 let costProfiles={}, curPreset='window', tickSince=0;   // panel 8: per-preset cost profile (persists across presets)
 let agents=[], blobs=[], tick=0, timer=null, paused=false;
 // ---- cascade-window curve (Fig 1): PERSISTS across preset/restart so a connectivity sweep traces the inverted-U ----
@@ -175,9 +177,7 @@ function clearPanels(){
   mB=new Float32Array(GX*GY); mE=new Float32Array(GX*GY); trail=[];
   fU=new Float32Array(FGX*FGY); fV=new Float32Array(FGX*FGY); fC=new Float32Array(FGX*FGY); prevZA=null;
   sizeCounts=new Map(); guHist=[]; stepLens=[]; sigmaSeries=[]; compBuf=[];
-  levyWalk=Array.from({length:120},()=>({x:0,y:0}));   // pure Lévy tracers (unwrapped, free-space)
-  brownWalk=Array.from({length:120},()=>({x:0,y:0}));  // pure Brownian tracers (α≈2)
-  transSeries=[];
+  stepLevyLen=[]; stepBrownLen=[];   // transport panel: the swarm's real exploration steps + a Brownian reference (reset per preset)
   if(blobs) blobs.forEach(b=>{ b.cSum=0; b.cN=0; b.worked=false; });
 }
 
@@ -228,9 +228,9 @@ function step(){
   const N=agents.length,R=P.R,PHI=P.PHI;
   let distTick=0, consTick=0;   // distance travelled & resource consumed this tick (live foraging efficiency)
   for(const b of blobs) b.r=Math.min(b.r0,b.r+REGROW);   // regrowth (keeps the cycle alive)
-  for(const a of agents){ if(a.active){ if(!a.onFood){const bx=randn()*P.VX,by=randn()*P.VX;a.x=wrap(a.x+bx,W);a.y=wrap(a.y+by,H);distTick+=Math.hypot(bx,by);} } // consumers hold
-    else{const sx=levy(),sy=levy();a.x=wrap(a.x+sx,W);a.y=wrap(a.y+sy,H);distTick+=Math.hypot(sx,sy);   // record explorer Lévy step lengths (panel 5)
-      if(stepLens.length<4000&&Math.random()<0.5)stepLens.push(Math.hypot(sx,sy));} }
+  for(const a of agents){ if(a.active){ if(!a.onFood){const bx=randn()*P.VX,by=randn()*P.VX;a.x=wrap(a.x+bx,W);a.y=wrap(a.y+by,H);const bl=Math.hypot(bx,by);distTick+=bl;stepBrownLen.push(bl);} } // recruited/exploit = Brownian jitter (a real move -> a data point)
+    else{const sx=levy(),sy=levy();a.x=wrap(a.x+sx,W);a.y=wrap(a.y+sy,H);const sl=Math.hypot(sx,sy);distTick+=sl;   // explorer step (a real move -> a data point)
+      if(stepLens.length<4000&&Math.random()<0.5)stepLens.push(sl); stepLevyLen.push(sl);} }
   for(const a of agents){ a.onFood=false;
     for(const b of blobs){ if(b.r>0.5&&tDist(a.x,a.y,b.x,b.y)<=b.r){a.onFood=true;consTick+=Math.min(0.6,b.r);b.r=Math.max(0,b.r-0.6);break;} }
     a.active=a.onFood?1:0; }
@@ -298,11 +298,9 @@ function step(){
     if(committed>=2)b.worked=true;
     if(b.worked&&committed===0){ if(b.r>0.3&&b.r0>0)guHist.push(b.r/b.r0); b.worked=false; }
   }
-  // transport panel: advance pure Lévy (current α) and Brownian (α≈2) tracers in free space; median distance from start
-  for(const p of levyWalk){p.x+=levyA(P.AL);p.y+=levyA(P.AL);}
-  for(const p of brownWalk){p.x+=levyA(1.95);p.y+=levyA(1.95);}
-  const medDist=arr=>{const d=arr.map(p=>Math.hypot(p.x,p.y)).sort((a,b)=>a-b);return d[d.length>>1];};
-  transSeries.push([medDist(levyWalk),medDist(brownWalk)]); if(transSeries.length>240)transSeries.shift();
+  // transport panel: roll both step-length windows (Lévy exploration + Brownian jitter — both real agent moves)
+  if(stepLevyLen.length>6000)stepLevyLen.splice(0,stepLevyLen.length-6000);
+  if(stepBrownLen.length>6000)stepBrownLen.splice(0,stepBrownLen.length-6000);
   tick++;
   byId('readout').innerHTML=`tick <b>${tick}</b> &nbsp; z<sub>local</sub>=<b>${z.toFixed(1)}</b> &nbsp; A=<b>${A.toFixed(2)}</b>`+
     `<br><span style="color:var(--grey)">■</span>${cE} <span style="color:var(--blue)">■</span>${cR} `+
@@ -345,17 +343,18 @@ function drawPhase(){const ctx=pxc,cw=pC.width,ch=pC.height,l=40,t=10,w=cw-l-12,
   let maxBin=0;for(let k=0;k<occ.length;k++)if(occ[k]>2){const gi=k%GX;if(gi>maxBin)maxBin=gi;}
   PHXM=clamp((maxBin+1)/GX*ZMAX*1.12,15,ZMAX);   // fit the occupied z-range (window ~15, blocked ~28)
   const X=z=>l+z/PHXM*w,Y=A=>t+h-A*h;
+  ctx.font='9px sans-serif';ctx.textAlign='right';ctx.fillStyle='#333';for(const yt of [[0,'0'],[0.5,'.5'],[1,'1']])ctx.fillText(yt[1],l-3,Y(yt[0])+3);ctx.textAlign='left';
   // --- state-composition "rich" regions (enrichment >= 1.5x each state's plane-average): smooth soft blobs, as in Fig 5b ---
   if(!phaseOff){phaseOff=document.createElement('canvas');}
   phaseOff.width=Math.max(1,w|0);phaseOff.height=Math.max(1,h|0);const octx=phaseOff.getContext('2d');
-  const colw=(ZMAX/GX)/PHXM*w,bh=h/GY,alphaOf={'#1a7a1a':0.6,'#1f4fd8':0.48,'#c01515':0.5,'#8f8f8f':0.6};
+  const colw=(ZMAX/GX)/PHXM*w,bh=h/GY,alphaOf={'#1a7a1a':0.6,'#1f4fd8':0.48,'#c01515':0.5,'#8f8f8f':0.72};
   for(const [col,get] of PH_STATES){const fld=get();
     // "state-rich" = cells above mean+0.8*std (z-score enrichment). Works for the DOMINANT explore state
     // (whose 1.5x-mean rule would exceed 1 and never fire) as well as the sparse active states.
     const vals=[];for(let k=0;k<occ.length;k++)if(occ[k]>=3)vals.push(fld[k]/occ[k]);
     if(!vals.length)continue;const mean=vals.reduce((a,b)=>a+b,0)/vals.length;
     const sd=Math.sqrt(vals.reduce((a,b)=>a+(b-mean)*(b-mean),0)/vals.length);
-    const thr=mean+0.8*sd;if(thr<=0)continue;
+    const thr=mean+(col==='#8f8f8f'?0.2:0.8)*sd;if(thr<=0)continue;   // dominant explore gets a lower bar so its region shows
     const m=new Uint8Array(GX*GY);
     for(let k=0;k<occ.length;k++) if(occ[k]>=3&&fld[k]/occ[k]>=thr) m[k]=1;
     const d=new Uint8Array(GX*GY);   // dilate once so scattered cells merge into coherent blobs
@@ -394,17 +393,19 @@ function drawPhase(){const ctx=pxc,cw=pC.width,ch=pC.height,l=40,t=10,w=cw-l-12,
   if(trail.length){const p=trail[trail.length-1];ctx.fillStyle='#000';ctx.beginPath();ctx.arc(X(Math.min(p[0],PHXM)),Y(p[1]),3.2,0,7);ctx.fill();
     ctx.strokeStyle='#fff';ctx.lineWidth=1;ctx.stroke();}
   axes(ctx,l,t,w,h);ctx.fillStyle='#333';ctx.font='12px sans-serif';
-  ctx.textAlign='center';ctx.fillText('z_local (mean degree of active agents)',l+w/2,t+h+17);ctx.textAlign='left';
+  ctx.textAlign='center';ctx.font='9px sans-serif';ctx.fillStyle='#333';for(const z of [0,5,10,15,20])if(z<=PHXM)ctx.fillText(''+z,X(z),t+h+11);ctx.font='12px sans-serif';ctx.fillText('z_local (mean degree of active agents)',l+w/2,t+h+22);ctx.textAlign='left';
   ctx.save();ctx.translate(12,t+h/2);ctx.rotate(-Math.PI/2);ctx.textAlign='center';ctx.fillText('active fraction A',0,0);ctx.textAlign='left';ctx.restore();
 }
 function drawCCDF(){const ctx=cxc,cw=cC.width,ch=cC.height,l=40,t=8,w=cw-l-10,h=ch-t-26;
   ctx.clearRect(0,0,cw,ch);axes(ctx,l,t,w,h);
   const sizes=[...sizeCounts.keys()].sort((a,b)=>a-b);let tot=0;sizeCounts.forEach(v=>tot+=v);
-  ctx.fillStyle='#333';ctx.font='12px sans-serif';ctx.textAlign='center';ctx.fillText('cluster size s (log)',l+w/2,t+h+17);ctx.textAlign='left';
+  ctx.fillStyle='#333';ctx.font='12px sans-serif';ctx.textAlign='center';ctx.fillText('cluster size s (log)',l+w/2,t+h+22);ctx.textAlign='left';
   ctx.save();ctx.translate(11,t+h/2);ctx.rotate(-Math.PI/2);ctx.fillText('P(S≥s) (log)',-30,0);ctx.restore();
   if(tot<5||sizes.length<2)return;
   const maxS=Math.max(sizes[sizes.length-1],P.N);const lx=s=>l+(Math.log10(s)/Math.log10(Math.max(maxS,10)))*w;
+  ctx.font='9px sans-serif';ctx.textAlign='center';ctx.fillStyle='#333';for(const s of [1,10,100,1000])if(s<=maxS)ctx.fillText(''+s,lx(s),t+h+11);ctx.textAlign='left';
   const minP=1/tot, ly=p=>t+h-(Math.log10(p)-Math.log10(minP))/(0-Math.log10(minP))*h;
+  ctx.font='9px sans-serif';ctx.textAlign='right';ctx.fillStyle='#333';for(const yt of [[1,'1'],[0.1,'.1'],[0.01,'.01']])if(yt[0]>=minP)ctx.fillText(yt[1],l-3,ly(yt[0])+3);ctx.textAlign='left';
   const pts=[];let cum=tot;for(const s of sizes){pts.push([s,cum/tot]);cum-=sizeCounts.get(s);}
   // critical-branching reference: CCDF ∝ s^(-1/2)  (mean-field avalanche exponent τ=3/2), anchored to the data at s=2
   {let p2=null;for(const [s,p] of pts){if(s>=2){p2=p;break;}}
@@ -426,9 +427,10 @@ function drawCCDF(){const ctx=cxc,cw=cC.width,ch=cC.height,l=40,t=8,w=cw-l-10,h=
 }
 function drawGUD(){const ctx=gxc,cw=gC.width,ch=gC.height,l=34,t=8,w=cw-l-10,h=ch-t-26;
   ctx.clearRect(0,0,cw,ch);axes(ctx,l,t,w,h);
-  ctx.fillStyle='#333';ctx.font='12px sans-serif';ctx.textAlign='center';ctx.fillText('resource left at departure',l+w/2,t+h+17);ctx.textAlign='left';
+  ctx.fillStyle='#333';ctx.textAlign='center';ctx.font='9px sans-serif';for(const gs of [[0,'0'],[0.5,'.5'],[1,'1']])ctx.fillText(gs[1],l+gs[0]*w,t+h+11);ctx.font='12px sans-serif';ctx.fillText('resource left at departure',l+w/2,t+h+22);ctx.textAlign='left';
   const NB=16,bins=new Array(NB).fill(0);for(const g of guHist){const k=clamp(Math.floor(g*NB),0,NB-1);bins[k]++;}
   const mx=Math.max(1,...bins),bw=w/NB;
+  ctx.font='9px sans-serif';ctx.textAlign='right';ctx.fillStyle='#333';for(const c of [0,mx])ctx.fillText(''+c,l-3,t+h-c/mx*h+3);ctx.textAlign='left';
   ctx.fillStyle='#1a7a1a';for(let k=0;k<NB;k++){const bh=bins[k]/mx*h;ctx.fillRect(l+k*bw+0.5,t+h-bh,bw-1,bh);}
   if(guHist.length>3){const sorted=[...guHist].sort((a,b)=>a-b),med=sorted[sorted.length>>1];
     const x=l+med*w;ctx.strokeStyle='#000';ctx.setLineDash([4,3]);ctx.beginPath();ctx.moveTo(x,t);ctx.lineTo(x,t+h);ctx.stroke();ctx.setLineDash([]);
@@ -436,13 +438,15 @@ function drawGUD(){const ctx=gxc,cw=gC.width,ch=gC.height,l=34,t=8,w=cw-l-10,h=c
 }
 function drawIFD(){const ctx=ixc,cw=iC.width,ch=iC.height,l=36,t=8,w=cw-l-10,h=ch-t-26;
   ctx.clearRect(0,0,cw,ch);axes(ctx,l,t,w,h);
-  ctx.fillStyle='#333';ctx.font='12px sans-serif';ctx.textAlign='center';ctx.fillText('patch richness (log)',l+w/2,t+h+17);ctx.textAlign='left';
+  ctx.fillStyle='#333';ctx.font='12px sans-serif';ctx.textAlign='center';ctx.fillText('patch richness (log)',l+w/2,t+h+22);ctx.textAlign='left';
   ctx.save();ctx.translate(11,t+h/2);ctx.rotate(-Math.PI/2);ctx.fillText('mean committed (log)',-42,0);ctx.restore();
   const pts=blobs.filter(b=>b.cN>0&&b.r0>0).map(b=>[Math.log10(b.r0),Math.log10(Math.max(0.3,b.cSum/b.cN))]);
   if(pts.length<2)return;
   const xs=pts.map(p=>p[0]),ys=pts.map(p=>p[1]);
   const xmin=Math.min(...xs),xmax=Math.max(...xs)+1e-6,ymin=Math.min(...ys)-0.2,ymax=Math.max(...ys)+0.2;
   const X=x=>l+(x-xmin)/(xmax-xmin)*w,Y=y=>t+h-(y-ymin)/(ymax-ymin)*h;
+  ctx.font='9px sans-serif';ctx.textAlign='right';ctx.fillStyle='#333';for(const yt of [[0,'1'],[1,'10'],[2,'100']])if(yt[0]>=ymin&&yt[0]<=ymax)ctx.fillText(yt[1],l-3,Y(yt[0])+3);
+  ctx.textAlign='center';for(const xt of [[0,'1'],[1,'10'],[2,'100'],[3,'1000']])if(xt[0]>=xmin&&xt[0]<=xmax)ctx.fillText(xt[1],X(xt[0]),t+h+11);ctx.textAlign='left';
   // slope-1 (ideal) reference through the centroid
   const mxx=xs.reduce((a,b)=>a+b,0)/xs.length,myy=ys.reduce((a,b)=>a+b,0)/ys.length;
   ctx.strokeStyle='#aaa';ctx.setLineDash([4,3]);ctx.beginPath();
@@ -454,6 +458,7 @@ function drawWindow(){const ctx=wxc,cw=wC.width,ch=wC.height,l=42,t=10,w=cw-l-12
   ctx.clearRect(0,0,cw,ch);const WXMAX=22;
   const pts=[];let amax=0.2;for(let i=0;i<WBINS;i++)if(winCnt[i]>=6){const a=winSum[i]/winCnt[i];if(a>amax)amax=a;pts.push([(i+0.5)/WBINS*ZMAX,a]);}
   const X=z=>l+z/WXMAX*w,Y=a=>t+h-a/amax*h;
+  ctx.font='9px sans-serif';ctx.textAlign='right';ctx.fillStyle='#333';for(const av of [0,amax/2,amax])ctx.fillText(av.toFixed(1),l-3,Y(av)+3);ctx.textAlign='left';
   // shaded cascade window (z_c .. 2/phi) + boundaries
   const xa=X(ZC),xb=X(Math.min(WXMAX,2/P.PHI));
   ctx.fillStyle='rgba(31,79,216,0.07)';ctx.fillRect(xa,t,xb-xa,h);
@@ -466,7 +471,7 @@ function drawWindow(){const ctx=wxc,cw=wC.width,ch=wC.height,l=42,t=10,w=cw-l-12
   if(pts.length>1){ctx.strokeStyle='#1250f0';ctx.lineWidth=2;ctx.beginPath();
     pts.forEach((p,i)=>{const x=X(p[0]),y=Y(p[1]);i?ctx.lineTo(x,y):ctx.moveTo(x,y);});ctx.stroke();}
   ctx.fillStyle='#1250f0';for(const p of pts){ctx.beginPath();ctx.arc(X(p[0]),Y(p[1]),2.3,0,7);ctx.fill();}
-  ctx.fillStyle='#333';ctx.font='12px sans-serif';ctx.textAlign='center';ctx.fillText('connectivity z_local (mean degree of active agents)',l+w/2,t+h+18);
+  ctx.fillStyle='#333';ctx.textAlign='center';ctx.font='9px sans-serif';for(const z of [0,5,10,15,20])if(z<=WXMAX)ctx.fillText(''+z,X(z),t+h+11);ctx.font='12px sans-serif';ctx.fillText('connectivity z_local (mean degree of active agents)',l+w/2,t+h+23);ctx.textAlign='left';
   ctx.save();ctx.translate(13,t+h/2);ctx.rotate(-Math.PI/2);ctx.fillText('active fraction A',0,0);ctx.restore();ctx.textAlign='left';
   if(pts.length<4){ctx.fillStyle='#999';ctx.font='11px sans-serif';ctx.fillText('the cycle traces this as it runs…',l+6,t+13);}
 }
@@ -485,6 +490,7 @@ const ME_DIFF =[0.81,0.818,0.804,0.784,0.757,0.859,0.94,0.973,1.0,0.937,0.862,0.
 function drawMaxEnt(){const ctx=mexc,cw=meC.width,ch=meC.height,l=40,t=12,w=cw-l-12,h=ch-t-30;
   ctx.clearRect(0,0,cw,ch);
   const X=a=>l+(a-0.1)/(2.0-0.1)*w,Y=v=>t+h-(v-0.35)/(1.03-0.35)*h;
+  ctx.font='9px sans-serif';ctx.textAlign='right';ctx.fillStyle='#333';for(const v of [0.4,0.6,0.8,1.0])ctx.fillText(v.toFixed(1),l-3,Y(v)+3);ctx.textAlign='left';
   ctx.fillStyle='rgba(120,120,120,0.14)';ctx.fillRect(X(0.8),t,X(1.2)-X(0.8),h);   // inverse-square band
   axes(ctx,l,t,w,h);
   const line=(arr,col)=>{ctx.strokeStyle=col;ctx.lineWidth=2;ctx.beginPath();
@@ -505,7 +511,7 @@ function drawMaxEnt(){const ctx=mexc,cw=meC.width,ch=meC.height,l=40,t=12,w=cw-l
   if(R!=null)tlabel(ctx,'live field R='+R.toFixed(2)+' → '+(clumped?'red':'green')+' curve',l+6,t+24,'#333','11px sans-serif');
   tlabel(ctx,'■ clustered → ballistic (α≈0.3)',l+6,t+h-24,'#c01515','11px sans-serif');
   tlabel(ctx,'■ diffuse → inverse-square (α≈1.3)',l+6,t+h-9,'#0a982d','11px sans-serif');
-  ctx.fillStyle='#333';ctx.font='12px sans-serif';ctx.textAlign='center';ctx.fillText('Lévy index α  (ballistic ← → Brownian)',l+w/2,t+h+18);
+  ctx.fillStyle='#333';ctx.textAlign='center';ctx.font='9px sans-serif';for(const a of [0.5,1,1.5,2])ctx.fillText(a.toFixed(1),X(a),t+h+11);ctx.font='12px sans-serif';ctx.fillText('Lévy index α  (ballistic ← → Brownian)',l+w/2,t+h+23);ctx.textAlign='left';
   ctx.save();ctx.translate(13,t+h/2);ctx.rotate(-Math.PI/2);ctx.fillText('efficiency η',0,0);ctx.restore();ctx.textAlign='left';}
 // panel 6: branching ratio sigma over cascades, poised just below the critical line 1
 function drawSigma(){const ctx=sgxc,cw=sgC.width,ch=sgC.height,l=34,t=10,w=cw-l-12,h=ch-t-30;
@@ -561,22 +567,39 @@ function drawCost(){const ctx=paxc,cw=paC.width,ch=paC.height,l=46,t=16,w=cw-l-1
   ctx.font='11px sans-serif';ctx.fillText('comms per harvest (log)',l+w/2,t+h+25);
   ctx.save();ctx.translate(13,t+h/2);ctx.rotate(-Math.PI/2);ctx.fillText('movement per harvest (log)',0,0);ctx.restore();ctx.textAlign='left';
   tlabel(ctx,'↙ cheaper per unit food · click presets to compare',l+4,t+11,'#888','10px sans-serif');}
-// transport panel: median distance from start over time, pure Lévy (current α) vs Brownian (α≈2)
-function drawTransport(){const ctx=trxc,cw=trC.width,ch=trC.height,l=42,t=10,w=cw-l-12,h=ch-t-30;
-  ctx.clearRect(0,0,cw,ch);const n=transSeries.length;
-  if(n<2){axes(ctx,l,t,w,h);return;}
-  let ymax=1e-6;for(const d of transSeries){if(d[0]>ymax)ymax=d[0];if(d[1]>ymax)ymax=d[1];}
-  ymax*=1.12;const X=i=>l+(n<2?0:i/(n-1))*w,Y=v=>t+h-clamp(v/ymax,0,1)*h;
+// transport panel: step-length distribution — the swarm's real exploration steps (Lévy, blue) vs a Brownian reference (grey)
+function drawTransport(){const ctx=trxc,cw=trC.width,ch=trC.height,l=46,t=14,w=cw-l-16,h=ch-t-36;
+  ctx.clearRect(0,0,cw,ch);
+  if(!stepLevyLen||stepLevyLen.length<40){axes(ctx,l,t,w,h);return;}
+  const LO=-1.3,HI=3.3,NB=30;                        // log10 step length, ~0.05 to ~2000
+  const hist=arr=>{const c=new Array(NB).fill(0);for(const v of arr){if(v<=0)continue;const b=Math.floor((Math.log10(v)-LO)/(HI-LO)*NB);if(b>=0&&b<NB)c[b]++;}return c;};
+  const cl=hist(stepLevyLen), cb=hist(stepBrownLen), nl=stepLevyLen.length, nb=Math.max(1,stepBrownLen.length);
+  let fmax=1e-6;for(let i=0;i<NB;i++)fmax=Math.max(fmax,cl[i]/nl,cb[i]/nb);
+  const Xd=v=>l+(Math.log10(v)-LO)/(HI-LO)*w, Xb=i=>l+(i+0.5)/NB*w;
+  const fLO=Math.log10(2e-4),fHI=Math.log10(fmax*1.5),Y=f=>t+h-(Math.log10(Math.max(f,1e-5))-fLO)/(fHI-fLO)*h;
   axes(ctx,l,t,w,h);
-  const curve=(idx,col,lw)=>{ctx.strokeStyle=col;ctx.lineWidth=lw;ctx.beginPath();
-    transSeries.forEach((d,i)=>{const x=X(i),y=Y(d[idx]);i?ctx.lineTo(x,y):ctx.moveTo(x,y);});ctx.stroke();};
-  curve(1,'#8a8f98',1.8); curve(0,'#1250f0',2.4);
-  const lv=transSeries[n-1][0],bw=transSeries[n-1][1];
-  tlabel(ctx,'Lévy (α='+P.AL.toFixed(2)+')'+(bw>0?'  ·  '+(lv/bw).toFixed(1)+'× Brownian':''),l+6,t+12,'#1250f0','11px sans-serif');
-  tlabel(ctx,'Brownian (α≈2)',l+6,t+26,'#6b7079','11px sans-serif');
-  ctx.fillStyle='#333';ctx.font='11px sans-serif';ctx.textAlign='right';ctx.fillText(ymax.toFixed(0),l-3,Y(ymax)+8);ctx.fillText('0',l-3,Y(0)+3);
-  ctx.textAlign='center';ctx.font='12px sans-serif';ctx.fillText('time (ticks) →',l+w/2,t+h+18);
-  ctx.save();ctx.translate(12,t+h/2);ctx.rotate(-Math.PI/2);ctx.fillText('median distance from start',0,0);ctx.restore();ctx.textAlign='left';}
+  ctx.font='9px sans-serif';ctx.textAlign='right';ctx.fillStyle='#333';for(const yt of [[1,'1'],[0.1,'.1'],[0.01,'.01'],[0.001,'.001']])if(Math.log10(yt[0])>=fLO&&Math.log10(yt[0])<=fHI)ctx.fillText(yt[1],l-3,Y(yt[0])+3);ctx.textAlign='left';
+  const line=(c,n,col,lw)=>{ctx.strokeStyle=col;ctx.lineWidth=lw;ctx.beginPath();let st=false;
+    for(let i=0;i<NB;i++){const f=c[i]/n;if(f<=0){st=false;continue;}const x=Xb(i),y=Y(f);st?ctx.lineTo(x,y):ctx.moveTo(x,y);st=true;}ctx.stroke();};
+  line(cb,nb,'#8a8f98',2.0);   // Brownian reference (grey)
+  line(cl,nl,'#1250f0',2.4);   // swarm's real exploration Lévy steps (blue)
+  // power-law fit to the Lévy tail (bins beyond ~3x the median step)
+  {const medL=[...stepLevyLen].sort((a,b)=>a-b)[stepLevyLen.length>>1]||1, thr=Math.max(3*medL,2), xs=[],ys=[];
+   for(let i=0;i<NB;i++){const f=cl[i]/nl,d=Math.pow(10,LO+(i+0.5)/NB*(HI-LO));if(f>0&&d>=thr){xs.push(Math.log10(d));ys.push(Math.log10(f));}}
+   if(xs.length>=3){let sx=0,sy=0,sxx=0,sxy=0;const nn=xs.length;for(let i=0;i<nn;i++){sx+=xs[i];sy+=ys[i];sxx+=xs[i]*xs[i];sxy+=xs[i]*ys[i];}
+     const b=(nn*sxy-sx*sy)/(nn*sxx-sx*sx),a=(sy-b*sx)/nn,d0=Math.pow(10,xs[0]),d1=Math.pow(10,xs[nn-1]);
+     ctx.strokeStyle='#c81e1e';ctx.setLineDash([5,3]);ctx.lineWidth=1.6;ctx.beginPath();
+     ctx.moveTo(Xd(d0),Y(Math.pow(10,a+b*Math.log10(d0))));ctx.lineTo(Xd(d1),Y(Math.pow(10,a+b*Math.log10(d1))));ctx.stroke();ctx.setLineDash([]);
+     window._levyTailSlope=b;}}
+  ctx.fillStyle='#333';ctx.font='10px sans-serif';ctx.textAlign='center';
+  for(const d of [0.1,1,10,100,1000]){const x=Xd(d);if(x>=l-2&&x<=l+w+2)ctx.fillText(d<1?'0.1':(''+d),x,t+h+12);}
+  const md=a=>{const s=[...a].sort((x,y)=>x-y);return s.length?s[s.length>>1]:0;};
+  ctx.textAlign='left';
+  tlabel(ctx,'exploration (Lévy α='+P.AL.toFixed(2)+'), median '+md(stepLevyLen).toFixed(1),l+5,t+11,'#1250f0','10.5px sans-serif');
+  tlabel(ctx,'recruited/local (Brownian), median '+md(stepBrownLen).toFixed(1),l+5,t+26,'#6b7079','10.5px sans-serif');
+  if(typeof window._levyTailSlope==='number'&&isFinite(window._levyTailSlope))tlabel(ctx,'Lévy tail: power law, slope '+window._levyTailSlope.toFixed(1),l+5,t+41,'#c81e1e','10.5px sans-serif');
+  ctx.fillStyle='#333';ctx.font='12px sans-serif';ctx.textAlign='center';ctx.fillText('step length (log)',l+w/2,t+h+25);
+  ctx.save();ctx.translate(13,t+h/2);ctx.rotate(-Math.PI/2);ctx.fillText('frequency (log)',0,0);ctx.restore();ctx.textAlign='left';}
 function render(){drawTorus();drawPhase();drawWindow();drawCCDF();drawGUD();drawIFD();drawMaxEnt();drawSigma();drawTransport();drawComp();drawCost();}
 
 // ---- loop / controls ----
@@ -603,7 +626,7 @@ document.querySelectorAll('#presets button').forEach(b=>b.addEventListener('clic
 byId('start').addEventListener('click',restart);
 byId('pause').addEventListener('click',e=>{paused=!paused;e.target.textContent=paused?'Resume':'Pause';});
 byId('clearP').addEventListener('click',()=>{clearPanels();clearWindow();costProfiles={};tickSince=0;});
-applyPreset('window');   // open in the interesting regime
+applyPreset('hetero');   // open in the distributed-φ regime (graded blocking — avoids the whole crowd freezing at once)
 </script>
 </body>
 </html>
