@@ -70,32 +70,34 @@
   <div class="wrap">
     <div class="main">
     <div class="col">
-    <div class="cell">
-      <div class="t">The swarm <small>— agents coloured by state; lines = active edges</small></div>
+    <div class="cell" title="The swarm foraging live on a torus. Grey = exploring (Lévy hops), blue = recruited (converging on a find), green = consuming, red = blocked (crowded out). Faint grey lines are the proximity graph (all agents within the connection radius); coloured lines are active recruitment edges.">
+      <div class="t">The swarm <small>— agents by state; faint grey = proximity graph, coloured = active edges</small></div>
       <canvas id="torus" width="440" height="440"></canvas>
     </div>
-    <div class="cell">
+    <div class="cell" title="The swarm sets its own connectivity: cascades pull agents together (raising mean degree z), and crowding then blocks recruitment. Activity peaks at intermediate z — the cascade window (Fig. 1).">
       <div class="t">The cascade window <small>— active fraction vs endogenous z (Fig. 1)</small></div>
       <canvas id="winfig" width="440" height="214"></canvas>
     </div>
     </div>
 
     <div class="grid">
-      <div class="cell"><div class="t">1 · Phase portrait <small>— poised SOC cycle</small></div>
+      <div class="cell" title="The drive–avalanche cycle traced live in the (connectivity z, activity A) plane; streamlines spiral into the swarm's poised operating point."><div class="t">1 · Phase portrait <small>— poised SOC cycle</small></div>
         <canvas id="phase" width="348" height="206"></canvas></div>
-      <div class="cell"><div class="t">2 · Cluster-size CCDF <small>— scale-free cascades</small></div>
+      <div class="cell" title="Sizes of recruitment cascades. A straight line on log–log = power law = no typical size = criticality. Dashed line is the critical-branching reference (τ=3/2)."><div class="t">2 · Cluster-size CCDF <small>— scale-free cascades</small></div>
         <canvas id="ccdf" width="348" height="206"></canvas></div>
-      <div class="cell"><div class="t">3 · Giving-up density <small>— leave before empty</small></div>
+      <div class="cell" title="Resource left when a patch is abandoned. Peaked above zero = agents leave before the patch is empty — marginal-value patch-leaving, with no rate estimate."><div class="t">3 · Giving-up density <small>— leave before empty</small></div>
         <canvas id="gud" width="348" height="206"></canvas></div>
-      <div class="cell"><div class="t">4 · Ideal free distribution <small>— RL without a learner</small></div>
+      <div class="cell" title="Agents committed per patch vs patch richness. Slope→1 means the swarm spreads in proportion to reward: the ideal free distribution — reinforcement learning with no learner."><div class="t">4 · Ideal free distribution <small>— RL without a learner</small></div>
         <canvas id="ifd" width="348" height="206"></canvas></div>
-      <div class="cell"><div class="t">5 · Two maximum entropies <small>— offline curves; dot = live field × α</small></div>
+      <div class="cell" title="Search efficiency vs Lévy exponent α. Heavy-tailed search is optimal, and the best α tracks the field's clustering — both are maximum-entropy choices. Dot = live field × current α."><div class="t">5 · Two maximum entropies <small>— offline curves; dot = live field × α</small></div>
         <canvas id="maxent" width="348" height="206"></canvas></div>
-      <div class="cell"><div class="t">6 · Branching ratio σ <small>— poised near critical (SOC)</small></div>
+      <div class="cell" title="Offspring per active agent, per cascade. Poised just below σ=1 (critical) — self-organized criticality, reached with no tuning."><div class="t">6 · Branching ratio σ <small>— poised near critical (SOC)</small></div>
         <canvas id="sigma" width="348" height="206"></canvas></div>
-      <div class="cell"><div class="t">7 · State composition <small>— the drive–avalanche cycle in time</small></div>
+      <div class="cell" title="Distance from start over time for pure Lévy vs Brownian walkers (free space). Heavy-tailed Lévy superdiffuses — it covers ground far faster than Brownian diffusion. Drag the α slider to watch the gap open and close."><div class="t">7 · Transport: Lévy vs Brownian <small>— distance from start over time</small></div>
+        <canvas id="trans" width="348" height="206"></canvas></div>
+      <div class="cell" title="The four state fractions over time — explore / recruit / consume / blocked cycling: the drive–avalanche loop in the time domain."><div class="t">8 · State composition <small>— the drive–avalanche cycle in time</small></div>
         <canvas id="comp" width="348" height="206"></canvas></div>
-      <div class="cell"><div class="t">8 · Cost profile per preset <small>— comms vs movement, per harvest</small></div>
+      <div class="cell" title="Movement vs communication cost per unit food, one point per preset (lower-left = cheaper). Recruitment adds message cost but is movement-neutral."><div class="t">9 · Cost profile per preset <small>— comms vs movement, per harvest</small></div>
         <canvas id="paths" width="348" height="206"></canvas></div>
     </div>
     </div><!--/main-->
@@ -149,6 +151,7 @@ const meC=byId('maxent'),mexc=meC.getContext('2d');
 const sgC=byId('sigma'),sgxc=sgC.getContext('2d');
 const cpC=byId('comp'),cpxc=cpC.getContext('2d');
 const paC=byId('paths'),paxc=paC.getContext('2d');
+const trC=byId('trans'),trxc=trC.getContext('2d');
 function byId(x){return document.getElementById(x);}
 
 // ---- phase-portrait occupancy ----
@@ -157,6 +160,7 @@ let occ,mR,mC,mB,mE, trail=[], fU,fV,fC, prevZA=null, phaseOff=null;
 // ---- coincidence accumulators ----
 let sizeCounts, guHist;                 // CCDF sizes, giving-up densities
 let stepLens, resGaps, sigmaSeries, compBuf, levyPath, brownPath;   // panels 5-8
+let levyWalk, brownWalk, transSeries;                                // transport panel: Lévy vs Brownian tracers
 let costProfiles={}, curPreset='window', tickSince=0;   // panel 8: per-preset cost profile (persists across presets)
 let agents=[], blobs=[], tick=0, timer=null, paused=false;
 // ---- cascade-window curve (Fig 1): PERSISTS across preset/restart so a connectivity sweep traces the inverted-U ----
@@ -169,6 +173,9 @@ function clearPanels(){
   mB=new Float32Array(GX*GY); mE=new Float32Array(GX*GY); trail=[];
   fU=new Float32Array(FGX*FGY); fV=new Float32Array(FGX*FGY); fC=new Float32Array(FGX*FGY); prevZA=null;
   sizeCounts=new Map(); guHist=[]; stepLens=[]; sigmaSeries=[]; compBuf=[];
+  levyWalk=Array.from({length:120},()=>({x:0,y:0}));   // pure Lévy tracers (unwrapped, free-space)
+  brownWalk=Array.from({length:120},()=>({x:0,y:0}));  // pure Brownian tracers (α≈2)
+  transSeries=[];
   if(blobs) blobs.forEach(b=>{ b.cSum=0; b.cN=0; b.worked=false; });
 }
 
@@ -180,10 +187,11 @@ function gamma(z){if(z<0.5)return Math.PI/(Math.sin(Math.PI*z)*gamma(1-z));z-=1;
   -176.61502916214059,12.507343278686905,-0.13857109526572012,9.9843695780195716e-6,1.5056327351493116e-7];
   let x=c[0];for(let i=1;i<g+2;i++)x+=c[i]/(z+i);const t=z+g+0.5;
   return Math.sqrt(2*Math.PI)*Math.pow(t,z+0.5)*Math.exp(-t)*x;}
-function levy(){const a=Math.min(Math.max(P.AL,0.4),1.95);
+function levyA(al){const a=Math.min(Math.max(al,0.4),1.95);
   const sn=Math.pow(gamma(1+a)*Math.sin(Math.PI*a/2),1/a);
   const sd=Math.pow(gamma((1+a)/2)*a*Math.pow(2,(a-1)/2),1/a);
   const s=sn/sd,u=s*randn(),w=Math.abs(randn());return (u/Math.pow(w,1/a))*P.VE/10;}
+function levy(){return levyA(P.AL);}
 function tDist(ax,ay,bx,by){const dx=Math.min(Math.abs(ax-bx),W-Math.abs(ax-bx)),
   dy=Math.min(Math.abs(ay-by),H-Math.abs(ay-by));return Math.sqrt(dx*dx+dy*dy);}
 function tDelta(a,b,s){let d=b-a;if(d>s/2)d-=s;if(d<-s/2)d+=s;return d;}
@@ -286,6 +294,11 @@ function step(){
     if(committed>=2)b.worked=true;
     if(b.worked&&committed===0){ if(b.r>0.3&&b.r0>0)guHist.push(b.r/b.r0); b.worked=false; }
   }
+  // transport panel: advance pure Lévy (current α) and Brownian (α≈2) tracers in free space; median distance from start
+  for(const p of levyWalk){p.x+=levyA(P.AL);p.y+=levyA(P.AL);}
+  for(const p of brownWalk){p.x+=levyA(1.95);p.y+=levyA(1.95);}
+  const medDist=arr=>{const d=arr.map(p=>Math.hypot(p.x,p.y)).sort((a,b)=>a-b);return d[d.length>>1];};
+  transSeries.push([medDist(levyWalk),medDist(brownWalk)]); if(transSeries.length>240)transSeries.shift();
   tick++;
   byId('readout').innerHTML=`tick <b>${tick}</b> &nbsp; z<sub>local</sub>=<b>${z.toFixed(1)}</b> &nbsp; A=<b>${A.toFixed(2)}</b>`+
     `<br><span style="color:var(--grey)">■</span>${cE} <span style="color:var(--blue)">■</span>${cR} `+
@@ -302,11 +315,18 @@ function tlabel(ctx,txt,x,y,color,font){ctx.font=font||'11px sans-serif';const w
 function drawTorus(){ tx.clearRect(0,0,W,H);
   for(const b of blobs){if(b.r<=0.5)continue;tx.beginPath();tx.arc(b.x,b.y,b.r,0,7);
     tx.fillStyle='rgba(200,155,55,0.28)';tx.fill();tx.lineWidth=1.4;tx.strokeStyle='rgba(150,105,20,0.7)';tx.stroke();tx.lineWidth=1;}
-  tx.strokeStyle='rgba(20,55,170,0.34)';tx.lineWidth=1;tx.beginPath();
+  // full proximity graph (every pair within the connection radius) — faint grey, present whether or not a cascade is active
+  tx.strokeStyle='rgba(120,126,136,0.18)';tx.lineWidth=1;tx.beginPath();
+  for(let i=0;i<agents.length;i++)for(let j=i+1;j<agents.length;j++){
+    const dx=agents[i].x-agents[j].x,dy=agents[i].y-agents[j].y;
+    if(Math.abs(dx)<P.R&&Math.abs(dy)<P.R&&Math.hypot(dx,dy)<=P.R){tx.moveTo(agents[i].x,agents[i].y);tx.lineTo(agents[j].x,agents[j].y);}}
+  tx.stroke();
+  // active recruitment edges (both endpoints active) — highlighted blue on top of the grey graph
+  tx.strokeStyle='rgba(20,55,170,0.55)';tx.lineWidth=1.4;tx.beginPath();
   for(let i=0;i<agents.length;i++){if(!agents[i].active)continue;for(let j=i+1;j<agents.length;j++){
     if(!agents[j].active)continue;const dx=agents[i].x-agents[j].x,dy=agents[i].y-agents[j].y;
     if(Math.abs(dx)<P.R&&Math.abs(dy)<P.R&&Math.hypot(dx,dy)<=P.R){tx.moveTo(agents[i].x,agents[i].y);tx.lineTo(agents[j].x,agents[j].y);}}}
-  tx.stroke();
+  tx.stroke();tx.lineWidth=1;
   // draw explorers first, active states (recruit/consume/blocked) on top with larger dots + outline = high contrast
   for(let pass=0;pass<2;pass++)for(const a of agents){const eng=(a.st!=='explore');if(eng!==(pass===1))continue;
     const c=COL[a.st],isC=(a.st==='consume'),rad=(a.st==='explore')?3.4:isC?6:4.6;
@@ -537,7 +557,23 @@ function drawCost(){const ctx=paxc,cw=paC.width,ch=paC.height,l=46,t=16,w=cw-l-1
   ctx.font='11px sans-serif';ctx.fillText('comms per harvest (log)',l+w/2,t+h+25);
   ctx.save();ctx.translate(13,t+h/2);ctx.rotate(-Math.PI/2);ctx.fillText('movement per harvest (log)',0,0);ctx.restore();ctx.textAlign='left';
   tlabel(ctx,'↙ cheaper per unit food · click presets to compare',l+4,t+11,'#888','10px sans-serif');}
-function render(){drawTorus();drawPhase();drawWindow();drawCCDF();drawGUD();drawIFD();drawMaxEnt();drawSigma();drawComp();drawCost();}
+// transport panel: median distance from start over time, pure Lévy (current α) vs Brownian (α≈2)
+function drawTransport(){const ctx=trxc,cw=trC.width,ch=trC.height,l=42,t=10,w=cw-l-12,h=ch-t-30;
+  ctx.clearRect(0,0,cw,ch);const n=transSeries.length;
+  if(n<2){axes(ctx,l,t,w,h);return;}
+  let ymax=1e-6;for(const d of transSeries){if(d[0]>ymax)ymax=d[0];if(d[1]>ymax)ymax=d[1];}
+  ymax*=1.12;const X=i=>l+(n<2?0:i/(n-1))*w,Y=v=>t+h-clamp(v/ymax,0,1)*h;
+  axes(ctx,l,t,w,h);
+  const curve=(idx,col,lw)=>{ctx.strokeStyle=col;ctx.lineWidth=lw;ctx.beginPath();
+    transSeries.forEach((d,i)=>{const x=X(i),y=Y(d[idx]);i?ctx.lineTo(x,y):ctx.moveTo(x,y);});ctx.stroke();};
+  curve(1,'#8a8f98',1.8); curve(0,'#1250f0',2.4);
+  const lv=transSeries[n-1][0],bw=transSeries[n-1][1];
+  tlabel(ctx,'Lévy (α='+P.AL.toFixed(2)+')'+(bw>0?'  ·  '+(lv/bw).toFixed(1)+'× Brownian':''),l+6,t+12,'#1250f0','11px sans-serif');
+  tlabel(ctx,'Brownian (α≈2)',l+6,t+26,'#6b7079','11px sans-serif');
+  ctx.fillStyle='#333';ctx.font='11px sans-serif';ctx.textAlign='right';ctx.fillText(ymax.toFixed(0),l-3,Y(ymax)+8);ctx.fillText('0',l-3,Y(0)+3);
+  ctx.textAlign='center';ctx.font='12px sans-serif';ctx.fillText('time (ticks) →',l+w/2,t+h+18);
+  ctx.save();ctx.translate(12,t+h/2);ctx.rotate(-Math.PI/2);ctx.fillText('median distance from start',0,0);ctx.restore();ctx.textAlign='left';}
+function render(){drawTorus();drawPhase();drawWindow();drawCCDF();drawGUD();drawIFD();drawMaxEnt();drawSigma();drawTransport();drawComp();drawCost();}
 
 // ---- loop / controls ----
 function loop(){if(!paused){step();render();}timer=setTimeout(loop,1000/P.TPS);}
