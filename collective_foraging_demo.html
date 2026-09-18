@@ -382,6 +382,12 @@ function drawCCDF(){const ctx=cxc,cw=cC.width,ch=cC.height,l=40,t=8,w=cw-l-10,h=
   const maxS=Math.max(sizes[sizes.length-1],P.N);const lx=s=>l+(Math.log10(s)/Math.log10(Math.max(maxS,10)))*w;
   const minP=1/tot, ly=p=>t+h-(Math.log10(p)-Math.log10(minP))/(0-Math.log10(minP))*h;
   const pts=[];let cum=tot;for(const s of sizes){pts.push([s,cum/tot]);cum-=sizeCounts.get(s);}
+  // critical-branching reference: CCDF ∝ s^(-1/2)  (mean-field avalanche exponent τ=3/2), anchored to the data at s=2
+  {let p2=null;for(const [s,p] of pts){if(s>=2){p2=p;break;}}
+   if(p2!==null){const sHi=Math.max(3,Math.min(0.5*P.N,maxS));
+     ctx.strokeStyle='rgba(90,90,90,0.85)';ctx.setLineDash([5,3]);ctx.lineWidth=1.3;ctx.beginPath();
+     ctx.moveTo(lx(2),clamp(ly(p2),t,t+h));ctx.lineTo(lx(sHi),clamp(ly(p2*Math.pow(sHi/2,-0.5)),t,t+h));ctx.stroke();ctx.setLineDash([]);
+     tlabel(ctx,'– – critical branching (τ=3/2)',l+6,t+26,'#5a5a5a','10px sans-serif');}}
   // power-law fit over the scaling region (s in [2, N/2], above the noise floor)
   const X=[],Y=[];for(const [s,p] of pts){if(s>=2&&s<=0.5*P.N&&p>1.6*minP){X.push(Math.log10(s));Y.push(Math.log10(p));}}
   if(X.length>=4){let sx=0,sy=0,sxx=0,sxy=0;const n=X.length;for(let i=0;i<n;i++){sx+=X[i];sy+=Y[i];sxx+=X[i]*X[i];sxy+=X[i]*Y[i];}
