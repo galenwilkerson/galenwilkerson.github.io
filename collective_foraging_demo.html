@@ -5,12 +5,12 @@
        (1) empirical phase portrait  (poised window / SOC drive-avalanche cycle)
        (2) scale-free recruited-cluster CCDF  (local self-organized criticality)
        (3) giving-up-density histogram  (marginal-value patch-leaving — blocking as the cause)
-       (4) IFD matching scatter  (ideal free distribution = reinforcement learning with no learner) -->
+       (4) reward-proportional patch allocation  (committed agents per patch track patch reward) -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Collective foraging from simple recruitment cascades: a maximum-entropy path to natural, learner-free reinforcement learning</title>
+<title>Collective foraging from simple recruitment cascades: percolating cascades coupled to a maximum-entropy field</title>
 <style>
   :root{ --grey:#7d7d82; --blue:#1250f0; --green:#16c74a; --red:#e41616; --ink:#222; }
   body{ font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; color:var(--ink);
@@ -48,7 +48,7 @@
 <body>
   <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin:0 0 8px">
     <h1 style="margin:0">Collective foraging from simple recruitment cascades:</h1>
-    <span style="font-size:16px;color:#444;font-weight:600">a maximum-entropy path to natural, learner-free reinforcement learning</span>
+    <span style="font-size:16px;color:#444;font-weight:600">percolating recruitment cascades coupled to a maximum-entropy field</span>
   </div>
   <p class="sub">A threshold <b>contagion</b> (Watts/Granovetter LTM) embedded in space, where the signal
   outruns the agents: a discovery <b>recruits</b> neighbours through a cascade on the proximity graph;
@@ -56,7 +56,7 @@
   the cascade rewires its own graph. Resources are sparse and <b>clumped</b> — the entropically generic
   (maximum-entropy) field. One running swarm — and the <b>elegant coincidences</b> build <i>live</i> in the
   panels: the self-organized cascade window, the poised SOC drive–avalanche cycle, scale-free avalanches,
-  marginal-value patch-leaving, the ideal-free distribution (reinforcement learning with no learner), the
+  marginal-value patch-leaving, reward-proportional patch allocation, the
   two maximum entropies (Lévy search ↔ resource field), and near-critical branching.</p>
 
   <div class="legend">
@@ -91,7 +91,7 @@
         <canvas id="ccdf" width="348" height="206"></canvas></div>
       <div class="cell" title="Resource left when a patch is abandoned. Peaked above zero = agents leave before the patch is empty — marginal-value patch-leaving, with no rate estimate."><div class="t">3 · Giving-up density <small>— leave before empty</small></div>
         <canvas id="gud" width="348" height="206"></canvas></div>
-      <div class="cell" title="Agents committed per patch vs patch richness. Slope→1 means the swarm spreads in proportion to reward: the ideal free distribution — reinforcement learning with no learner."><div class="t">4 · Ideal free distribution <small>— RL without a learner</small></div>
+      <div class="cell" title="Agents committed per patch vs patch richness. Slope→1 means the swarm spreads in proportion to reward: reward-proportional patch allocation."><div class="t">4 · Reward-proportional allocation <small>— committed agents track patch reward</small></div>
         <canvas id="ifd" width="348" height="206"></canvas></div>
       <div class="cell" title="Search efficiency vs Lévy exponent α. Heavy-tailed search is optimal, and the best α tracks the field's clustering — both are maximum-entropy choices. Dot = live field × current α."><div class="t">5 · Two maximum entropies <small>— offline curves; dot = live field × α</small></div>
         <canvas id="maxent" width="348" height="206"></canvas></div>
