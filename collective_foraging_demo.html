@@ -53,8 +53,9 @@
   <p class="sub">A threshold <b>contagion</b> (Watts/Granovetter LTM) embedded in space, where the signal
   outruns the agents: a discovery <b>recruits</b> neighbours through a cascade on the proximity graph;
   <b>fraction-normalised</b> activation both spreads it <i>and</i> stifles it once crowded (<b>blocking</b>);
-  the cascade rewires its own graph. Resources are sparse and <b>clumped</b> — the entropically generic
-  (maximum-entropy) field. One running swarm — and the <b>elegant coincidences</b> build <i>live</i> in the
+  the cascade rewires its own graph. Resources are sparse and <b>clumped</b> by default — a clustered field,
+  the generic regime where recruitment pays; presets also include the Poisson (maximum-entropy) baseline and an
+  over-dispersed field. One running swarm — and the <b>elegant coincidences</b> build <i>live</i> in the
   panels: the self-organized cascade window, the poised SOC drive–avalanche cycle, scale-free avalanches,
   marginal-value patch-leaving, reward-proportional patch allocation, the
   two maximum entropies (Lévy search ↔ resource field), and near-critical branching.</p>
@@ -93,7 +94,7 @@
         <canvas id="gud" width="348" height="206"></canvas></div>
       <div class="cell" title="Agents committed per patch vs patch richness. Slope→1 means the swarm spreads in proportion to reward: reward-proportional patch allocation."><div class="t">4 · Reward-proportional allocation <small>— committed agents track patch reward</small></div>
         <canvas id="ifd" width="348" height="206"></canvas></div>
-      <div class="cell" title="Search efficiency vs Lévy exponent α. Heavy-tailed search is optimal, and the best α tracks the field's clustering — both are maximum-entropy choices. Dot = live field × current α."><div class="t">5 · Two maximum entropies <small>— offline curves; dot = live field × α</small></div>
+      <div class="cell" title="Search efficiency vs Lévy exponent α. Heavy-tailed search is advantageous, and the best α tracks the field's clustering — both are maximum-entropy choices. Dot = live field × current α."><div class="t">5 · Two maximum entropies <small>— offline curves; dot = live field × α</small></div>
         <canvas id="maxent" width="348" height="206"></canvas></div>
       <div class="cell" title="Offspring per active agent, per cascade. Poised just below σ=1 (critical) — self-organized criticality, reached with no tuning."><div class="t">6 · Branching ratio σ <small>— poised near critical (SOC)</small></div>
         <canvas id="sigma" width="348" height="206"></canvas></div>
@@ -105,9 +106,9 @@
     </div><!--/main-->
 
     <div id="controls">
-      <div style="font-size:13.5px;font-weight:600;margin-bottom:2px">Presets <small style="font-weight:400;color:#666">— connectivity moves the swarm through the cascade window</small></div>
+      <div style="font-size:13.5px;font-weight:600;margin-bottom:2px">Presets <small style="font-weight:400;color:#666">— vary the resource field, connectivity, and search; the default is the regime where recruitment pays most</small></div>
       <div class="presets" id="presets">
-        <button data-p="sub">Sub-percolation</button><button data-p="window">Cascade window</button><button data-p="blocked">Blocked</button><button data-p="hetero" title="Agents draw their own threshold from φ±δφ — blocking grades in (a few block first, more with density) instead of the whole crowd at once.">Heterogeneous φ</button><button data-p="brown">Brownian</button><button data-p="moveff">Heavy-tail search</button><button data-p="commeff">Comm.-eff.</button><button data-p="uniform">Uniform field</button>
+        <button data-p="optimal" title="Everything aligned: a sparse, tightly clustered field, connectivity inside the cascade window, heavy-tailed search, and graded blocking — the regime where recruitment pays most.">Optimal</button><button data-p="window" title="Mean degree inside the cascade window (z_c≈4.51 &lt; z &lt; 2/φ): discoveries recruit, the crowd converges and consumes, blocking self-limits, agents release and re-explore.">Cascade window</button><button data-p="hetero" title="Cascade window with agents drawing φ from φ±δφ, so blocking grades in (a few block first, more with density) instead of the whole crowd at once — efficiency and criticality unchanged.">Heterogeneous φ</button><button data-p="sub" title="Connectivity below the percolation threshold (z &lt; z_c≈4.51): the graph is fragmented and cascades die at birth — pure solitary foraging.">Sub-percolation</button><button data-p="blocked" title="Connectivity so high (z &gt; 2/φ) that the active fraction a/k rarely clears φ: high-degree nodes are non-vulnerable and recruitment is suppressed.">Blocked</button><button data-p="brown" title="Window connectivity but near-Brownian search (α≈1.9): no long hops, so exploration is slow and sparse patches are found late.">Brownian</button><button data-p="moveff" title="Heavy-tailed search (α≈1.1): most search-efficient per discovery but travel-heavy — recruitment adds message cost while staying movement-neutral.">Heavy-tail search</button><button data-p="commeff" title="A sparser graph and fewer agents: cascades stay small and local, so coordination is reached with few activation messages.">Comm.-eff.</button><button data-p="poisson" title="A sparse Poisson field (complete spatial randomness) — the maximum-entropy baseline. Recruitment still pays modestly here: the floor of the floor-and-climb.">Poisson (max-ent)</button><button data-p="regular" title="An over-dispersed, near-regular field (effective repulsion): resources sit far apart with no clumps, so recruitment barely pays — regularity would need an active dispersive mechanism.">Regular field</button><button data-p="uniform" title="An abundant, diffuse field — resources nearly everywhere: little to aggregate toward, so recruitment over-concentrates the swarm and loses to solitary foraging.">Abundant field</button>
       </div>
       <div id="regime"></div>
       <div class="btns">
@@ -129,11 +130,12 @@
 
 <script>
 "use strict";
-const P={ N:100,B:16,S:16,R:52,PHI:0.15,DPHI:0,AL:1.2,VE:24,VX:3,TPS:12,SCATTER:0 };
+const P={ N:100,B:16,S:16,R:52,PHI:0.15,DPHI:0,AL:1.2,VE:24,VX:3,TPS:12,SCATTER:0,SPREAD:0,FIELD:'' };
 const W=440,H=440, ZC=4.51, REGROW=0.07;   // slow resource regrowth sustains the drive-avalanche cycle
 // Presets tuned to the paper's operating point (N=100, phi=0.15, CLUMPED resources): window sits at
 // z_local~10 (paper 10.3), A~0.21 (paper 0.22). Connectivity radius R sets mean degree z; window in (z_c=4.51, 2/phi=13.3).
 const PRESETS={
+  optimal:{name:'Optimal — clustered field, cascade window, heavy-tail search, graded blocking', N:100, R:52, AL:1.1, VE:24, PHI:0.15, DPHI:0.05, SPREAD:14},
   sub:    {name:'Sub-percolation — pure foraging (cascades die at birth)', N:100, R:28, AL:1.5, VE:24},
   window: {name:'Cascade window — recruit, converge, self-limit, release', N:100, R:52, AL:1.2, VE:24},
   blocked:{name:'Blocked — graph so dense a/k rarely reaches φ', N:100, R:116, AL:1.5, VE:24},
@@ -141,7 +143,9 @@ const PRESETS={
   brown:  {name:'Brownian search — window connectivity, no long hops', N:100, R:52, AL:1.9, VE:24},
   moveff: {name:'Heavy-tail search — most search-efficient, but travel-heavy (recruitment is movement-neutral)', N:100, R:60, AL:1.1, VE:30},
   commeff:{name:'Communication-efficient — sparse graph, cheap local cascades', N:80,  R:50, AL:1.5, VE:24},
-  uniform:{name:'Uniform field — resources scattered; recruitment over-concentrates (loses)', N:100, R:52, AL:1.5, VE:24, scatter:1},
+  poisson:{name:'Poisson / maximum-entropy field — sparse CSR; recruitment still pays modestly (the floor)', N:100, B:8, R:52, AL:1.2, VE:24, scatter:1},
+  regular:{name:'Regular / over-dispersed field — recruitment barely pays (regularity needs active dispersion)', N:100, R:52, AL:1.5, VE:24, FIELD:'regular'},
+  uniform:{name:'Abundant/diffuse field — resources nearly everywhere; recruitment over-concentrates (loses)', N:100, B:30, R:52, AL:1.5, VE:24, scatter:1},
 };
 const COL={ explore:[125,125,130], recruit:[18,80,240], consume:[22,199,74], blocked:[228,22,22] };
 
@@ -202,13 +206,19 @@ const wrap=(x,s)=>((x%s)+s)%s;
 // ---- init ----
 function init(){
   tick=0;
-  // Resources are CLUMPED by default (sparse clustering = the entropically generic / maximum-entropy field,
-  // where recruitment pays). P.SCATTER=1 places them UNIFORMLY-random to show recruitment over-concentrates.
-  if(P.SCATTER){
+  // Resource field has three modes: clustered (default, a Thomas cluster process — the generic regime where
+  // recruitment pays), Poisson/CSR (P.SCATTER=1 — the maximum-entropy baseline), and regular (P.FIELD='regular'
+  // — an over-dispersed, jittered grid). P.SPREAD>0 overrides the clump spread (smaller = tighter clusters).
+  if(P.FIELD==='regular'){
+    const cols=Math.ceil(Math.sqrt(P.B)), rows=Math.max(1,Math.ceil(P.B/cols)), cw=W/cols, ch=H/rows, jit=0.16;
+    blobs=Array.from({length:P.B},(_,i)=>{const gx=i%cols, gy=Math.floor(i/cols);
+      const r=Math.max(2,P.S*(0.5+0.9*Math.random()));
+      return {x:wrap((gx+0.5+(Math.random()*2-1)*jit)*cw,W),y:wrap((gy+0.5+(Math.random()*2-1)*jit)*ch,H),r,r0:r,cSum:0,cN:0,worked:false};});
+  } else if(P.SCATTER){
     blobs=Array.from({length:P.B},()=>{const r=Math.max(2,P.S*(0.5+0.9*Math.random()));
       return {x:Math.random()*W,y:Math.random()*H,r,r0:r,cSum:0,cN:0,worked:false};});
   } else {
-    const nClump=clamp(Math.round(P.B/4),2,6), spread=Math.max(20,P.S*2.2);
+    const nClump=clamp(Math.round(P.B/4),2,6), spread=P.SPREAD>0?P.SPREAD:Math.max(20,P.S*2.2);
     const centers=Array.from({length:nClump},()=>({x:Math.random()*W,y:Math.random()*H}));
     blobs=Array.from({length:P.B},()=>{const c=centers[Math.floor(Math.random()*nClump)];
       const r=Math.max(2,P.S*(0.5+0.9*Math.random()));
@@ -547,8 +557,8 @@ function drawComp(){const ctx=cpxc,cw=cpC.width,ch=cpC.height,l=40,t=22,w=cw-l-1
 // panel 8: cost-profile SCATTER, one persisted point per preset visited -- comms-per-harvest (x) vs
 // movement-per-harvest (y), both log. Comm.-efficient lands far left; Movement-efficient lands low;
 // lower-left = cheaper per unit food. Points persist across preset switches (cleared by "Clear panels").
-const CP_SHORT={sub:'sub',window:'window',blocked:'blocked',hetero:'hetero-φ',brown:'brown',moveff:'heavy-tail',commeff:'comm-eff',uniform:'uniform',custom:'custom'};
-const CP_COL={window:'#1250f0',commeff:'#c81e1e',moveff:'#c8922a',blocked:'#8a2be2',hetero:'#e0007b',sub:'#7d7d82',brown:'#0a982d',uniform:'#e07b00',custom:'#333'};
+const CP_SHORT={optimal:'optimal',sub:'sub',window:'window',blocked:'blocked',hetero:'hetero-φ',brown:'brown',moveff:'heavy-tail',commeff:'comm-eff',poisson:'poisson',regular:'regular',uniform:'abundant',custom:'custom'};
+const CP_COL={optimal:'#0f766e',window:'#1250f0',commeff:'#c81e1e',moveff:'#c8922a',blocked:'#8a2be2',hetero:'#e0007b',sub:'#7d7d82',brown:'#0a982d',poisson:'#0891b2',regular:'#92400e',uniform:'#e07b00',custom:'#333'};
 function drawCost(){const ctx=paxc,cw=paC.width,ch=paC.height,l=46,t=16,w=cw-l-14,h=ch-t-36;
   ctx.clearRect(0,0,cw,ch);
   const X0=0.5,X1=200,Y0=5,Y1=5000;
@@ -608,7 +618,7 @@ function restart(){if(timer)clearTimeout(timer);init();paused=false;byId('pause'
 function setSlider(id,key,fmt){const el=byId(id);if(!el)return;el.value=P[key];const o=byId(id+'v');if(o)o.textContent=fmt?fmt(P[key]):P[key];}
 function applyPreset(k){const pr=PRESETS[k];if(!pr)return;
   curPreset=k;tickSince=0;   // panel-8 cost profile now accumulates for this preset
-  P.N=pr.N||100;P.B=16;P.S=16;P.PHI=pr.PHI||0.15;P.DPHI=pr.DPHI||0;P.R=pr.R;P.AL=pr.AL;P.VE=pr.VE||24;P.SCATTER=pr.scatter?1:0;
+  P.N=pr.N||100;P.B=pr.B||16;P.S=pr.S||16;P.PHI=pr.PHI||0.15;P.DPHI=pr.DPHI||0;P.R=pr.R;P.AL=pr.AL;P.VE=pr.VE||24;P.SCATTER=pr.scatter?1:0;P.SPREAD=pr.SPREAD||0;P.FIELD=pr.FIELD||'';
   setSlider('N','N');setSlider('B','B');setSlider('S','S');setSlider('R','R');setSlider('VE','VE');
   setSlider('PHI','PHI',v=>v.toFixed(2));setSlider('DPHI','DPHI',v=>v.toFixed(2));setSlider('AL','AL',v=>v.toFixed(2));
   document.querySelectorAll('#presets button').forEach(b=>b.classList.toggle('on',b.dataset.p===k));
@@ -626,7 +636,7 @@ document.querySelectorAll('#presets button').forEach(b=>b.addEventListener('clic
 byId('start').addEventListener('click',restart);
 byId('pause').addEventListener('click',e=>{paused=!paused;e.target.textContent=paused?'Resume':'Pause';});
 byId('clearP').addEventListener('click',()=>{clearPanels();clearWindow();costProfiles={};tickSince=0;});
-applyPreset('hetero');   // open in the distributed-φ regime (graded blocking — avoids the whole crowd freezing at once)
+applyPreset('optimal');   // open in the best regime (clustered field, cascade window, heavy-tail search, graded blocking)
 </script>
 </body>
 </html>
