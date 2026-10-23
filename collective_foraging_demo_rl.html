@@ -43,6 +43,12 @@
   #regime b{ font-variant-numeric:tabular-nums; }
   .read{ font-size:14px; background:#fff; border:1px solid #ddd; border-radius:5px; padding:8px 10px; margin-top:7px; }
   .read b{ font-variant-numeric:tabular-nums; }
+  .paperbox{ background:#f4f7ff; border:1px solid #c9d6f7; border-left:4px solid var(--blue); border-radius:6px;
+             padding:9px 13px; margin:4px 0 12px; max-width:none; font-size:14px; }
+  .paperbox-t{ font-weight:700; color:#16306e; margin:0 0 3px; font-size:14.5px; }
+  .paperbox-t small{ font-weight:400; color:#5a6b8c; font-size:12.5px; }
+  .paperbox p{ margin:0; color:#2a2a2a; line-height:1.4; }
+  .paperbox p b{ font-variant-numeric:tabular-nums; }
 </style>
 </head>
 <body>
@@ -60,6 +66,15 @@
   the swarm's approach to that allocation (panel 4), and the <b>self-organizing mechanism</b> behind it — the
   cascade window, the drive–avalanche cycle, scale-free avalanches, marginal-value patch-leaving, and
   near-critical branching (developed in the companion paper).</p>
+
+  <div class="paperbox">
+    <div class="paperbox-t">From the paper — vs. a trained RL learner <small>(result summary, not the live sim below)</small></div>
+    <p>Against a trained PPO learner in the same sensing-limited environment, the reward-free swarm (zero training)
+    ties the best learner's harvest where resource is clustered and plentiful (<b>0.80 vs 0.80</b> of a validated
+    oracle ceiling) and trails only where resource is scarce (<b>0.22 vs 0.33</b>); it matches the ideal-free
+    allocation gradient more faithfully than any learner (slope <b>~1 vs 0.69–0.91</b>). Learning buys precision
+    (tighter per-capita intake), not a better allocation.</p>
+  </div>
 
   <div class="legend">
     <span><i class="dot" style="background:var(--grey)"></i> explore (Lévy search)</span>
@@ -115,13 +130,13 @@
       <div class="btns">
         <button id="start">Restart</button><button id="pause">Pause</button><button id="clearP">Clear panels</button>
       </div>
-      <div class="row"><label>Agents N</label><input type="range" id="N" min="20" max="200" value="120"><span class="val" id="Nv">120</span></div>
+      <div class="row"><label>Agents N</label><input type="range" id="N" min="20" max="200" value="200"><span class="val" id="Nv">200</span></div>
       <div class="row"><label>Resources</label><input type="range" id="B" min="1" max="40" value="16"><span class="val" id="Bv">16</span></div>
       <div class="row"><label>Resource size</label><input type="range" id="S" min="4" max="40" value="16"><span class="val" id="Sv">16</span></div>
-      <div class="row"><label>Conn. radius</label><input type="range" id="R" min="12" max="140" value="52"><span class="val" id="Rv">52</span></div>
-      <div class="row"><label>Threshold φ</label><input type="range" id="PHI" min="0.05" max="0.5" step="0.01" value="0.15"><span class="val" id="PHIv">0.15</span></div>
+      <div class="row"><label>Conn. radius</label><input type="range" id="R" min="12" max="140" value="45"><span class="val" id="Rv">45</span></div>
+      <div class="row"><label>Threshold φ</label><input type="range" id="PHI" min="0.05" max="0.5" step="0.01" value="0.18"><span class="val" id="PHIv">0.18</span></div>
       <div class="row" title="Threshold heterogeneity: each agent draws its own φ from φ±δφ. δφ=0 is the homogeneous baseline (whole crowd blocks at once); δφ>0 grades the blocking — high-φ agents block first, more as density rises (efficiency & criticality unchanged; a paper sweep result)."><label>Threshold spread δφ</label><input type="range" id="DPHI" min="0" max="0.15" step="0.01" value="0"><span class="val" id="DPHIv">0.00</span></div>
-      <div class="row"><label>Lévy α</label><input type="range" id="AL" min="0.4" max="1.9" step="0.05" value="1.2"><span class="val" id="ALv">1.2</span></div>
+      <div class="row"><label>Lévy α</label><input type="range" id="AL" min="0.4" max="1.9" step="0.05" value="1.0"><span class="val" id="ALv">1.0</span></div>
       <div class="row"><label>Explore step</label><input type="range" id="VE" min="2" max="40" step="1" value="24"><span class="val" id="VEv">24</span></div>
       <div class="row"><label>Recruit step</label><input type="range" id="VX" min="0.5" max="8" step="0.5" value="3"><span class="val" id="VXv">3</span></div>
       <div class="row"><label>Speed ticks/s</label><input type="range" id="TPS" min="2" max="60" step="1" value="12"><span class="val" id="TPSv">12</span></div>
@@ -131,7 +146,7 @@
 
 <script>
 "use strict";
-const P={ N:100,B:16,S:16,R:52,PHI:0.15,DPHI:0,AL:1.2,VE:24,VX:3,TPS:12,SCATTER:0 };
+const P={ N:200,B:16,S:16,R:45,PHI:0.18,DPHI:0,AL:1.0,VE:24,VX:3,TPS:12,SCATTER:0 };  // defaults = paper's canonical POISED point: α=1.0, φ=0.18, N=200, R=45 → ρ_r=N·(R/L)²≈2.1 (L=W=440)
 const W=440,H=440, ZC=4.51, REGROW=0.07;   // slow resource regrowth sustains the drive-avalanche cycle
 // Presets tuned to the paper's operating point (N=100, phi=0.15, CLUMPED resources): window sits at
 // z_local~10 (paper 10.3), A~0.21 (paper 0.22). Connectivity radius R sets mean degree z; window in (z_c=4.51, 2/phi=13.3).
@@ -628,7 +643,13 @@ document.querySelectorAll('#presets button').forEach(b=>b.addEventListener('clic
 byId('start').addEventListener('click',restart);
 byId('pause').addEventListener('click',e=>{paused=!paused;e.target.textContent=paused?'Resume':'Pause';});
 byId('clearP').addEventListener('click',()=>{clearPanels();clearWindow();costProfiles={};tickSince=0;});
-applyPreset('hetero');   // open in the distributed-φ regime (graded blocking — avoids the whole crowd freezing at once)
+// Open at the paper's canonical POISED operating point (α=1.0, φ=0.18, N=200, ρ_r≈2.1 at R=45, L=440):
+// subcritical / near-ideal matching — lively but not flooding. P already holds these defaults; run from them.
+curPreset='custom';tickSince=0;
+document.querySelectorAll('#presets button').forEach(b=>b.classList.remove('on'));
+byId('regime').innerHTML=`<b>Paper operating point — poised (α=1.0, φ=0.18, N=200, ρ_r≈2.1)</b><br>`+
+  `window is z<sub>local</sub>∈(<b>${ZC.toFixed(1)}</b>,<b>${(2/P.PHI).toFixed(1)}</b>)`;
+restart();
 </script>
 </body>
 </html>
